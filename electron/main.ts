@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
+import { spawn, type IPty } from 'node-pty'
 
 const __dirname = import.meta.dirname
 
@@ -119,6 +120,82 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
 ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string) => {
   try {
     await fs.promises.writeFile(filePath, content, 'utf-8')
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+// Terminal IPC handlers using node-pty
+const terminals = new Map<string, IPty>()
+
+function getDefaultShell(): string {
+  if (process.platform === 'win32') {
+    return process.env.COMSPEC || 'cmd.exe'
+  }
+  return process.env.SHELL || '/bin/bash'
+}
+
+ipcMain.handle('terminal:create', (_event, id: string, cwd: string) => {
+  try {
+    const shell = getDefaultShell()
+    const pty = spawn(shell, [], {
+      name: 'xterm-color',
+      cwd: cwd || process.cwd(),
+      env: process.env,
+      cols: 80,
+      rows: 24,
+    })
+
+    terminals.set(id, pty)
+
+    pty.onData((data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:data', id, data)
+      }
+    })
+
+    pty.onExit(() => {
+      terminals.delete(id)
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:exit', id)
+      }
+    })
+
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('terminal:write', (_event, id: string, data: string) => {
+  const pty = terminals.get(id)
+  if (!pty) return { error: 'Terminal not found' }
+  try {
+    pty.write(data)
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('terminal:resize', (_event, id: string, cols: number, rows: number) => {
+  const pty = terminals.get(id)
+  if (!pty) return { error: 'Terminal not found' }
+  try {
+    pty.resize(cols, rows)
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('terminal:kill', (_event, id: string) => {
+  const pty = terminals.get(id)
+  if (!pty) return { success: true }
+  try {
+    pty.kill()
+    terminals.delete(id)
     return { success: true }
   } catch (err) {
     return { error: (err as Error).message }
