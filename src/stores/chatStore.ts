@@ -6,6 +6,7 @@ export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
+  images?: string[]
   isStreaming?: boolean
   timestamp: number
 }
@@ -14,9 +15,14 @@ interface ChatStore {
   messages: ChatMessage[]
   inputValue: string
   isLoading: boolean
+  pendingImages: string[]
 
   setInputValue: (value: string) => void
+  setPendingImages: (images: string[]) => void
+  addPendingImage: (image: string) => void
+  removePendingImage: (index: number) => void
   sendMessage: (content: string) => void
+  sendImageMessage: (content: string, images: string[]) => void
   appendStream: (messageId: string, chunk: string) => void
   finishStream: (messageId: string) => void
   clearChat: () => void
@@ -35,16 +41,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   ],
   inputValue: '',
   isLoading: false,
+  pendingImages: [],
 
   setInputValue: (value) => {
     set({ inputValue: value })
   },
 
+  setPendingImages: (images) => {
+    set({ pendingImages: images })
+  },
+
+  addPendingImage: (image) => {
+    set((s) => ({ pendingImages: [...s.pendingImages, image] }))
+  },
+
+  removePendingImage: (index) => {
+    set((s) => ({ pendingImages: s.pendingImages.filter((_, i) => i !== index) }))
+  },
+
   sendMessage: (content) => {
+    get().sendImageMessage(content, [])
+  },
+
+  sendImageMessage: (content, images) => {
     const userMsg: ChatMessage = {
       id: 'user-' + String(Date.now()),
       role: 'user',
       content,
+      images: images.length > 0 ? images : undefined,
       timestamp: Date.now(),
     }
 
@@ -59,6 +83,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({
       messages: [...get().messages, userMsg, thinkingMsg],
       inputValue: '',
+      pendingImages: [],
       isLoading: true,
     })
 

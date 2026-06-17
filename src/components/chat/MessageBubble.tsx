@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import type { ChatMessage } from '../../stores/chatStore'
+import { ImagePreview } from './ImagePreview'
 
 interface MessageBubbleProps {
   message: ChatMessage
@@ -18,6 +19,11 @@ export function MessageBubble({ message }: MessageBubbleProps): JSX.Element {
             : 'bg-[#313438] text-[#DFE1E5]',
         ].join(' ')}
       >
+        {message.images && message.images.length > 0 && (
+          <div className="mb-2">
+            <ImagePreview images={message.images} />
+          </div>
+        )}
         <MessageContent content={message.content} isStreaming={message.isStreaming ?? false} />
       </div>
     </div>
