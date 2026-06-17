@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useCliStore } from './cliStore'
 
 export type MessageRole = 'user' | 'assistant' | 'thinking'
 
@@ -27,8 +28,6 @@ interface ChatStore {
   finishStream: (messageId: string) => void
   clearChat: () => void
 }
-
-let streamInterval: ReturnType<typeof setInterval> | null = null
 
 export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [
@@ -72,62 +71,38 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       timestamp: Date.now(),
     }
 
-    const thinkingMsg: ChatMessage = {
-      id: 'thinking-' + String(Date.now()),
-      role: 'thinking',
-      content: 'Analyzing your request...',
+    const assistantId = 'assistant-' + String(Date.now())
+
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
       isStreaming: true,
       timestamp: Date.now(),
     }
 
     set({
-      messages: [...get().messages, userMsg, thinkingMsg],
+      messages: [...get().messages, userMsg, assistantMsg],
       inputValue: '',
       pendingImages: [],
       isLoading: true,
     })
 
-    // Simulate thinking delay then stream response
-    setTimeout(() => {
-      const assistantId = 'assistant-' + String(Date.now())
-      const responseText = simulateResponse(content)
-      const assistantMsg: ChatMessage = {
-        id: assistantId,
-        role: 'assistant',
-        content: '',
-        isStreaming: true,
-        timestamp: Date.now(),
+    // Send to CLI
+    const cliStore = useCliStore.getState()
+    cliStore.sendMessage({
+      id: assistantId,
+      type: images.length > 0 ? 'image' : 'message',
+      content,
+      images: images.length > 0 ? images : undefined,
+    }).then((success) => {
+      if (!success) {
+        // Fallback to simulation if CLI not available
+        simulateStream(assistantId, content, set)
       }
-
-      set((s) => ({
-        messages: s.messages.filter((m) => m.role !== 'thinking').concat(assistantMsg),
-        isLoading: true,
-      }))
-
-      let idx = 0
-      streamInterval = setInterval(() => {
-        if (idx >= responseText.length) {
-          if (streamInterval) {
-            clearInterval(streamInterval)
-            streamInterval = null
-          }
-          set((s) => ({
-            messages: s.messages.map((m) =>
-              m.id === assistantId ? { ...m, isStreaming: false } : m
-            ),
-            isLoading: false,
-          }))
-          return
-        }
-        const chunk = responseText.slice(idx, idx + 3)
-        idx += 3
-        set((s) => ({
-          messages: s.messages.map((m) =>
-            m.id === assistantId ? { ...m, content: m.content + chunk } : m
-          ),
-        }))
-      }, 50)
-    }, 800)
+    }).catch(() => {
+      simulateStream(assistantId, content, set)
+    })
   },
 
   appendStream: (messageId, chunk) => {
@@ -162,6 +137,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     })
   },
 }))
+
+function simulateStream(
+  assistantId: string,
+  content: string,
+  set: (fn: (s: ChatStore) => Partial<ChatStore>) => void
+): void {
+  const responseText = simulateResponse(content)
+  let idx = 0
+  const interval = setInterval(() => {
+    if (idx >= responseText.length) {
+      clearInterval(interval)
+      set((s) => ({
+        messages: s.messages.map((m) =>
+          m.id === assistantId ? { ...m, isStreaming: false } : m
+        ),
+        isLoading: false,
+      }))
+      return
+    }
+    const chunk = responseText.slice(idx, idx + 3)
+    idx += 3
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === assistantId ? { ...m, content: m.content + chunk } : m
+      ),
+    }))
+  }, 50)
+}
 
 function simulateResponse(userContent: string): string {
   const lower = userContent.toLowerCase()

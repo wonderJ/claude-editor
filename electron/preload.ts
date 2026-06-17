@@ -21,6 +21,15 @@ export interface ElectronAPI {
   terminalKill: (id: string) => Promise<{ success: boolean } | { error: string }>
   onTerminalData: (callback: (id: string, data: string) => void) => () => void
   onTerminalExit: (callback: (id: string) => void) => () => void
+  // CLI
+  cliStart: () => Promise<{ success: boolean }>
+  cliStop: () => Promise<{ success: boolean }>
+  cliRestart: () => Promise<{ success: boolean }>
+  cliSend: (message: { type: string; content: string; images?: string[]; id: string }) => Promise<{ success: boolean }>
+  cliStatus: () => Promise<{ status: string }>
+  onCliData: (callback: (response: { type: string; content: string; done: boolean; messageId: string }) => void) => () => void
+  onCliStatus: (callback: (status: string) => void) => () => void
+  onCliError: (callback: (error: string) => void) => () => void
 }
 
 export interface DirEntry {
@@ -56,6 +65,26 @@ const api: ElectronAPI = {
     const handler = (_event: unknown, id: string) => { callback(id) }
     ipcRenderer.on('terminal:exit', handler)
     return () => { ipcRenderer.removeListener('terminal:exit', handler) }
+  },
+  cliStart: () => ipcRenderer.invoke('cli:start'),
+  cliStop: () => ipcRenderer.invoke('cli:stop'),
+  cliRestart: () => ipcRenderer.invoke('cli:restart'),
+  cliSend: (message) => ipcRenderer.invoke('cli:send', message),
+  cliStatus: () => ipcRenderer.invoke('cli:status'),
+  onCliData: (callback) => {
+    const handler = (_event: unknown, response: { type: string; content: string; done: boolean; messageId: string }) => { callback(response) }
+    ipcRenderer.on('cli:data', handler)
+    return () => { ipcRenderer.removeListener('cli:data', handler) }
+  },
+  onCliStatus: (callback) => {
+    const handler = (_event: unknown, status: string) => { callback(status) }
+    ipcRenderer.on('cli:status', handler)
+    return () => { ipcRenderer.removeListener('cli:status', handler) }
+  },
+  onCliError: (callback) => {
+    const handler = (_event: unknown, error: string) => { callback(error) }
+    ipcRenderer.on('cli:error', handler)
+    return () => { ipcRenderer.removeListener('cli:error', handler) }
   },
 }
 

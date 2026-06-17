@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { spawn, type IPty } from 'node-pty'
+import { cliManager, type CliResponse } from './cli/claude-cli'
 
 const __dirname = import.meta.dirname
 
@@ -200,6 +201,49 @@ ipcMain.handle('terminal:kill', (_event, id: string) => {
   } catch (err) {
     return { error: (err as Error).message }
   }
+})
+
+// CLI IPC handlers
+cliManager.setCallbacks(
+  (response: CliResponse) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('cli:data', response)
+    }
+  },
+  (status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('cli:status', status)
+    }
+  },
+  (error) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('cli:error', error)
+    }
+  }
+)
+
+ipcMain.handle('cli:start', () => {
+  const result = cliManager.start()
+  return { success: result }
+})
+
+ipcMain.handle('cli:stop', () => {
+  cliManager.stop()
+  return { success: true }
+})
+
+ipcMain.handle('cli:restart', () => {
+  const result = cliManager.restart()
+  return { success: result }
+})
+
+ipcMain.handle('cli:send', (_event, message: { type: string; content: string; images?: string[]; id: string }) => {
+  const result = cliManager.sendMessage(message)
+  return { success: result }
+})
+
+ipcMain.handle('cli:status', () => {
+  return { status: cliManager.getStatus() }
 })
 
 void app.whenReady().then(() => {
