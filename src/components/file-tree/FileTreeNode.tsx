@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
 import { useFileStore, type FileNode } from '../../stores/fileStore'
+import { useEditorStore } from '../../stores/editorStore'
 import { FileIcon, FolderIcon } from './FileIcons'
 import { ContextMenu } from './ContextMenu'
 
@@ -11,6 +12,7 @@ interface FileTreeNodeProps {
 
 export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
   const { expandedPaths, selectedPath, toggleExpanded, setSelected, addToast, refresh } = useFileStore()
+  const { openTab } = useEditorStore()
   const isExpanded = expandedPaths.has(node.path)
   const isSelected = selectedPath === node.path
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
@@ -26,15 +28,8 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
 
   const handleDoubleClick = () => {
     if (node.isFile) {
-      addToast({ message: `Opened ${node.name}`, type: 'info', duration: 2000 })
+      void loadFileToEditor(node.path, node.name, openTab, addToast)
     }
-  }
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setSelected(node.path)
-    setContextMenu({ x: e.clientX, y: e.clientY })
   }
 
   const handleNewFile = async () => {
@@ -124,7 +119,12 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
         style={{ paddingLeft }}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
-        onContextMenu={handleContextMenu}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setSelected(node.path)
+          setContextMenu({ x: e.clientX, y: e.clientY })
+        }}
       >
         {node.isDirectory && (
           <span className="text-[10px] text-[#8C8C8C]">
@@ -159,4 +159,23 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
       )}
     </div>
   )
+}
+
+async function loadFileToEditor(
+  path: string,
+  name: string,
+  openTab: (path: string, name: string, content: string) => void,
+  addToast: (toast: { message: string; type: 'success' | 'error' | 'warning' | 'info'; duration?: number }) => void
+): Promise<void> {
+  if (!window.electronAPI) {
+    addToast({ message: 'Electron API not available', type: 'error' })
+    return
+  }
+  const result = await window.electronAPI.readFile(path)
+  if ('error' in result) {
+    addToast({ message: `Failed to open file: ${result.error}`, type: 'error' })
+    return
+  }
+  openTab(path, name, result.content)
+  addToast({ message: `Opened ${name}`, type: 'info', duration: 2000 })
 }
