@@ -34,7 +34,7 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
 
   const handleNewFile = async () => {
     if (!window.electronAPI) return
-    const newPath = `${node.path}/new-file.txt`
+    const newPath = await generateUniquePath(node.path, 'new-file.txt', window.electronAPI.readDir)
     const result = await window.electronAPI.createFile(newPath)
     if ('error' in result) {
       addToast({ message: result.error, type: 'error' })
@@ -46,7 +46,7 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
 
   const handleNewFolder = async () => {
     if (!window.electronAPI) return
-    const newPath = `${node.path}/new-folder`
+    const newPath = await generateUniquePath(node.path, 'new-folder', window.electronAPI.readDir)
     const result = await window.electronAPI.createDir(newPath)
     if ('error' in result) {
       addToast({ message: result.error, type: 'error' })
@@ -178,4 +178,27 @@ async function loadFileToEditor(
   }
   openTab(path, name, result.content)
   addToast({ message: `Opened ${name}`, type: 'info', duration: 2000 })
+}
+
+async function generateUniquePath(
+  parentPath: string,
+  baseName: string,
+  readDir: (path: string) => Promise<{ name: string }[] | { error: string }>
+): Promise<string> {
+  const result = await readDir(parentPath)
+  if ('error' in result) {
+    return `${parentPath}/${baseName}`
+  }
+  const existingNames = new Set(result.map((e) => e.name))
+  if (!existingNames.has(baseName)) {
+    return `${parentPath}/${baseName}`
+  }
+  const dotIndex = baseName.lastIndexOf('.')
+  const namePart = dotIndex > 0 ? baseName.slice(0, dotIndex) : baseName
+  const extPart = dotIndex > 0 ? baseName.slice(dotIndex) : ''
+  let idx = 1
+  while (existingNames.has(`${namePart}-${String(idx)}${extPart}`)) {
+    idx++
+  }
+  return `${parentPath}/${namePart}-${String(idx)}${extPart}`
 }
