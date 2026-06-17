@@ -4,7 +4,7 @@ import { useLayoutStore } from '../../stores/layoutStore'
 import { Sidebar } from './Sidebar'
 import { EditorArea } from './EditorArea'
 import { TerminalPanel } from './TerminalPanel'
-import { ChatPanel } from './ChatPanel'
+import { ChatPanel } from '../chat/ChatPanel'
 import { StatusBar } from './StatusBar'
 import { ResizableSplitter } from './ResizableSplitter'
 
