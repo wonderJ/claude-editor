@@ -7,8 +7,8 @@ export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
-  images?: string[]
-  isStreaming?: boolean
+  images?: string[] | undefined
+  isStreaming?: boolean | undefined
   timestamp: number
 }
 

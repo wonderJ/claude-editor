@@ -6,7 +6,7 @@ export interface CliMessage {
   id: string
   type: 'message' | 'image'
   content: string
-  images?: string[]
+  images?: string[] | undefined
 }
 
 export interface CliResponse {

@@ -25,7 +25,7 @@ export interface ElectronAPI {
   cliStart: () => Promise<{ success: boolean }>
   cliStop: () => Promise<{ success: boolean }>
   cliRestart: () => Promise<{ success: boolean }>
-  cliSend: (message: { type: string; content: string; images?: string[]; id: string }) => Promise<{ success: boolean }>
+  cliSend: (message: { type: string; content: string; images?: string[] | undefined; id: string }) => Promise<{ success: boolean }>
   cliStatus: () => Promise<{ status: string }>
   onCliData: (callback: (response: { type: string; content: string; done: boolean; messageId: string }) => void) => () => void
   onCliStatus: (callback: (status: string) => void) => () => void

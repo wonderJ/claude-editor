@@ -15,6 +15,7 @@
     "@tailwindcss/vite": "^4.1.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "esbuild": "^0.28.1",
     "lucide-react": "^0.510.0",
     "node-pty": "^1.1.0",
     "react": "^19.2.6",

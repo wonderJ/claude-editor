@@ -7,7 +7,7 @@ export type CliStatus = 'offline' | 'online' | 'thinking' | 'error'
 export interface CliMessage {
   type: 'message' | 'image'
   content: string
-  images?: string[]
+  images?: string[] | undefined
   id: string
 }
 

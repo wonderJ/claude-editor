@@ -237,8 +237,9 @@ ipcMain.handle('cli:restart', () => {
   return { success: result }
 })
 
-ipcMain.handle('cli:send', (_event, message: { type: string; content: string; images?: string[]; id: string }) => {
-  const result = cliManager.sendMessage(message)
+ipcMain.handle('cli:send', (_event, message: { type: string; content: string; images?: string[] | undefined; id: string }) => {
+  const typedMessage = message as { type: 'message' | 'image'; content: string; images?: string[] | undefined; id: string }
+  const result = cliManager.sendMessage(typedMessage)
   return { success: result }
 })
 

@@ -69,7 +69,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       const newTabs = s.tabs.filter((t) => t.id !== id)
       let newActiveId = s.activeTabId
       if (s.activeTabId === id) {
-        newActiveId = newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null
+        newActiveId = newTabs.length > 0 ? newTabs[newTabs.length - 1]!.id : null
       }
       return { tabs: newTabs, activeTabId: newActiveId }
     })
@@ -118,7 +118,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       tabs: s.tabs.map((t) => (t.id === id ? { ...t, historyIndex: newIndex } : t)),
     }))
 
-    return newIndex === -1 ? '' : tab.history[newIndex]
+    return newIndex === -1 ? '' : tab.history[newIndex] ?? ''
   },
 
   updateSettings: (settings) => {
