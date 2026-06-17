@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
+import fs from 'node:fs'
 
 const __dirname = import.meta.dirname
 
@@ -21,7 +22,6 @@ function createWindow(): void {
     show: false,
   })
 
-  // Load Vite dev server or production build
   if (process.env.VITE_DEV_SERVER_URL) {
     void mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
     mainWindow.webContents.openDevTools()
@@ -38,9 +38,92 @@ function createWindow(): void {
   })
 }
 
-// IPC handlers
+// IPC handlers - app info
 ipcMain.handle('app:platform', () => process.platform)
 ipcMain.handle('app:version', () => app.getVersion())
+
+// IPC handlers - file system
+ipcMain.handle('fs:selectFolder', async () => {
+  if (!mainWindow) return null
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
+
+ipcMain.handle('fs:readDir', async (_event, dirPath: string) => {
+  try {
+    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
+    return entries.map((entry) => ({
+      name: entry.name,
+      path: path.join(dirPath, entry.name),
+      isDirectory: entry.isDirectory(),
+      isFile: entry.isFile(),
+    }))
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('fs:createFile', async (_event, filePath: string) => {
+  try {
+    await fs.promises.writeFile(filePath, '', { flag: 'wx' })
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('fs:createDir', async (_event, dirPath: string) => {
+  try {
+    await fs.promises.mkdir(dirPath, { recursive: true })
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('fs:rename', async (_event, oldPath: string, newPath: string) => {
+  try {
+    await fs.promises.rename(oldPath, newPath)
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('fs:delete', async (_event, targetPath: string) => {
+  try {
+    const stat = await fs.promises.stat(targetPath)
+    if (stat.isDirectory()) {
+      await fs.promises.rmdir(targetPath, { recursive: true })
+    } else {
+      await fs.promises.unlink(targetPath)
+    }
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
+  try {
+    const content = await fs.promises.readFile(filePath, 'utf-8')
+    return { content }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string) => {
+  try {
+    await fs.promises.writeFile(filePath, content, 'utf-8')
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
 
 void app.whenReady().then(() => {
   createWindow()

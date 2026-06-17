@@ -1,6 +1,7 @@
 import type { JSX } from 'react'
 import { Folder, MessageSquare, Search, Settings } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layoutStore'
+import { FileTree } from '../file-tree/FileTree'
 
 export function Sidebar(): JSX.Element {
   const { sidebarVisible, sidebarWidth, sidebarCollapsed, setSidebarCollapsed } = useLayoutStore()
@@ -70,8 +71,8 @@ export function Sidebar(): JSX.Element {
           </button>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto p-2">
-          <div className="text-sm text-[#8C8C8C]">File tree placeholder</div>
+        <div className="flex-1 overflow-hidden">
+          <FileTree />
         </div>
       )}
     </div>
