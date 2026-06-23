@@ -1,6 +1,10 @@
-import { spawn, execSync, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const { spawn } = require('node-pty') as typeof import('node-pty')
 
 export type CliStatus = 'offline' | 'online' | 'thinking' | 'error'
 
@@ -24,7 +28,7 @@ export interface CliResponse {
 }
 
 export class ClaudeCliManager {
-  private process: ChildProcessWithoutNullStreams | null = null
+  private pty: import('node-pty').IPty | null = null
   private status: CliStatus = 'offline'
   private onDataCallback: ((response: CliResponse) => void) | null = null
   private onStatusCallback: ((status: CliStatus) => void) | null = null
@@ -48,7 +52,7 @@ export class ClaudeCliManager {
   }
 
   start(): boolean {
-    if (this.process && !this.process.killed) {
+    if (this.pty) {
       console.log('[CLI] Already running, skip start')
       return true
     }
@@ -62,43 +66,30 @@ export class ClaudeCliManager {
         return false
       }
 
-      console.log('[CLI] Spawning:', cliPath, 'cwd:', os.homedir(), 'shell: true')
-      this.process = spawn(cliPath, [], {
-        cwd: os.homedir(),
-        env: { ...process.env, CLAUDE_CODE_JSON_MODE: '1' },
-        shell: true,
+      console.log('[CLI] Spawning pty:', cliPath, 'cwd:', process.cwd())
+      this.pty = spawn(cliPath, [], {
+        name: 'xterm-color',
+        cwd: process.cwd(),
+        env: process.env,
+        cols: 80,
+        rows: 30,
       })
-      console.log('[CLI] Spawn returned, pid:', this.process.pid)
+      console.log('[CLI] pty spawned, pid:', this.pty.pid)
 
-      this.process.stdout.on('data', (data: Buffer) => {
-        const str = data.toString()
-        console.log('[CLI] stdout:', str.slice(0, 200))
-        this.handleStdout(str)
-      })
-
-      this.process.stderr.on('data', (data: Buffer) => {
-        const err = data.toString().trim()
-        console.log('[CLI] stderr:', err.slice(0, 200))
-        if (err) {
-          this.onErrorCallback?.(err)
-        }
+      this.pty.onData((data: string) => {
+        console.log('[CLI] pty data:', data.slice(0, 200))
+        this.handleStdout(data)
       })
 
-      this.process.on('exit', (code, signal) => {
-        console.log('[CLI] exit, code:', code, 'signal:', signal)
+      this.pty.onExit(({ exitCode, signal }) => {
+        console.log('[CLI] pty exit, code:', exitCode, 'signal:', signal)
         this.setStatus('offline')
-        this.process = null
-        if (code !== 0 && this.restartAttempts < this.maxRestarts) {
+        this.pty = null
+        if (exitCode !== 0 && this.restartAttempts < this.maxRestarts) {
           this.restartAttempts++
           console.log('[CLI] Auto-restart attempt', this.restartAttempts)
           setTimeout(() => this.start(), 2000)
         }
-      })
-
-      this.process.on('error', (err) => {
-        console.log('[CLI] process error:', err.message)
-        this.setStatus('error')
-        this.onErrorCallback?.('CLI process error: ' + err.message)
       })
 
       this.setStatus('online')
@@ -114,9 +105,9 @@ export class ClaudeCliManager {
   }
 
   stop(): void {
-    if (this.process && !this.process.killed) {
-      this.process.kill('SIGTERM')
-      this.process = null
+    if (this.pty) {
+      this.pty.kill()
+      this.pty = null
     }
     this.setStatus('offline')
   }
@@ -127,14 +118,15 @@ export class ClaudeCliManager {
   }
 
   sendMessage(message: CliMessage): boolean {
-    if (!this.process || this.process.killed) {
+    if (!this.pty) {
       return false
     }
 
     try {
       this.setStatus('thinking')
-      const payload = JSON.stringify(message) + '\n'
-      this.process.stdin.write(payload)
+      // In interactive mode, send message followed by Enter
+      const payload = message.content + '\r'
+      this.pty.write(payload)
       return true
     } catch (err) {
       this.onErrorCallback?.('Failed to send message: ' + String(err))
@@ -143,13 +135,19 @@ export class ClaudeCliManager {
   }
 
   private handleStdout(data: string): void {
-    this.buffer += data
+    // For interactive mode, we get raw terminal output with ANSI codes
+    // Strip ANSI codes for parsing
+    const clean = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+    console.log('[CLI] clean data:', clean.slice(0, 200))
+
+    this.buffer += clean
     const lines = this.buffer.split('\n')
     this.buffer = lines.pop() || ''
 
     for (const line of lines) {
       if (!line.trim()) continue
 
+      // Try JSON first (if claude outputs JSON)
       try {
         const response = JSON.parse(line) as CliResponse
         if (response.type === 'thinking') {
