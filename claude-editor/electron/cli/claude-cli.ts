@@ -180,10 +180,11 @@ export class ClaudeCliManager {
       try {
         const result = execSync(
           process.platform === 'win32' ? `where ${candidate}` : `which ${candidate}`,
-          { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+          { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], shell: true }
         )
-        if (result.trim()) {
-          return candidate
+        const firstLine = result.trim().split('\n')[0]?.trim()
+        if (firstLine) {
+          return firstLine
         }
       } catch {
         // Command not found, try next
