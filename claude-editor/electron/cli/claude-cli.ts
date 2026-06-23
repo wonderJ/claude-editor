@@ -67,7 +67,13 @@ export class ClaudeCliManager {
       }
 
       console.log('[CLI] Spawning pty:', cliPath, 'cwd:', process.cwd())
-      this.pty = spawn(cliPath, [], {
+
+      // Windows: node-pty cannot execute .cmd files directly, use cmd.exe /c
+      const isWin = process.platform === 'win32'
+      const shell = isWin ? 'cmd.exe' : cliPath
+      const args = isWin ? ['/c', cliPath] : []
+
+      this.pty = spawn(shell, args, {
         name: 'xterm-color',
         cwd: process.cwd(),
         env: process.env,
