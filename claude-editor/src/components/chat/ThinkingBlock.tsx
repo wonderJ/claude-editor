@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Brain } from 'lucide-react'
 
 interface ThinkingBlockProps {
   content: string
@@ -22,11 +22,13 @@ export function ThinkingBlock({ content }: ThinkingBlockProps): JSX.Element {
             }}
           >
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            <Brain size={12} className="text-[#FFC107]" />
             <span>Thinking</span>
           </button>
         ) : (
           <span className="flex items-center gap-1 text-xs text-[#5C5C5C]">
             <ChevronRight size={12} />
+            <Brain size={12} className="animate-pulse text-[#FFC107]" />
             Thinking...
           </span>
         )}

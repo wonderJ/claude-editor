@@ -3,6 +3,8 @@ import type { JSX } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { MessageBubble } from './MessageBubble'
 import { ThinkingBlock } from './ThinkingBlock'
+import { ToolCallCard } from './ToolCallCard'
+import { DiffViewer } from './DiffViewer'
 
 export function ChatMessages(): JSX.Element {
   const { messages } = useChatStore()
@@ -30,7 +32,27 @@ export function ChatMessages(): JSX.Element {
         if (message.role === 'thinking') {
           return <ThinkingBlock key={message.id} content={message.content} />
         }
-        return <MessageBubble key={message.id} message={message} />
+        return (
+          <div key={message.id}>
+            <MessageBubble message={message} />
+            {/* Tool calls - rendered if present, but V1 backend does not parse them */}
+            {message.toolCalls && message.toolCalls.length > 0 && (
+              <div className="mb-2 ml-4 flex flex-col gap-1">
+                {message.toolCalls.map((tool) => (
+                  <ToolCallCard key={tool.id} toolCall={tool} />
+                ))}
+              </div>
+            )}
+            {/* Diff blocks - rendered if present, but V1 backend does not parse them */}
+            {message.diffBlocks && message.diffBlocks.length > 0 && (
+              <div className="mb-2 ml-4 flex flex-col gap-2">
+                {message.diffBlocks.map((diff) => (
+                  <DiffViewer key={diff.id} diff={diff} />
+                ))}
+              </div>
+            )}
+          </div>
+        )
       })}
     </div>
   )

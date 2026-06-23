@@ -1,12 +1,18 @@
 import { create } from 'zustand'
 
 export type CliStatus = 'offline' | 'online' | 'thinking' | 'error'
+export type AiProvider = 'claude' | 'codex'
 
 export interface CliMessage {
   id: string
   type: 'message' | 'image'
   content: string
   images?: string[] | undefined
+  model?: string
+  provider?: string
+  streamingEnabled?: boolean
+  thinkingMode?: string
+  mentionedFiles?: string[]
 }
 
 export interface CliResponse {
@@ -19,10 +25,12 @@ export interface CliResponse {
 interface CliStore {
   status: CliStatus
   lastError: string | null
+  provider: AiProvider
 
   setStatus: (status: CliStatus) => void
   setError: (error: string) => void
   clearError: () => void
+  setProvider: (provider: AiProvider) => void
 
   startCli: () => Promise<boolean>
   stopCli: () => Promise<boolean>
@@ -34,6 +42,7 @@ interface CliStore {
 export const useCliStore = create<CliStore>((set) => ({
   status: 'offline',
   lastError: null,
+  provider: 'claude',
 
   setStatus: (status) => {
     set({ status })
@@ -45,6 +54,10 @@ export const useCliStore = create<CliStore>((set) => ({
 
   clearError: () => {
     set({ lastError: null })
+  },
+
+  setProvider: (provider) => {
+    set({ provider })
   },
 
   startCli: async () => {

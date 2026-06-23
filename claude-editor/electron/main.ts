@@ -180,6 +180,7 @@ ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string)
 
 // Terminal IPC handlers using node-pty
 const terminals = new Map<string, IPty>()
+const terminalSizes = new Map<string, { cols: number; rows: number }>()
 
 /**
  * Colorize shell prompt lines in terminal output.
@@ -259,6 +260,11 @@ ipcMain.handle('terminal:resize', (_event, id: string, cols: number, rows: numbe
   const pty = terminals.get(id)
   if (!pty) return { error: 'Terminal not found' }
   try {
+    const prev = terminalSizes.get(id)
+    if (prev && prev.cols === cols && prev.rows === rows) {
+      return { success: true }
+    }
+    terminalSizes.set(id, { cols, rows })
     pty.resize(cols, rows)
     return { success: true }
   } catch (err) {

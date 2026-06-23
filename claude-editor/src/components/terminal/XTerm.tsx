@@ -9,37 +9,45 @@ interface XTermProps {
   id: string
   settings: TerminalSettings
   onData: (id: string, data: string) => void
+  onKey?: (id: string, key: { key: string; domEvent: KeyboardEvent }) => void
 }
 
-export function XTerm({ id, settings, onData }: XTermProps): JSX.Element {
+export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const onDataRef = useRef(onData)
   onDataRef.current = onData
+  const onKeyRef = useRef(onKey)
+  onKeyRef.current = onKey
   const selectionRef = useRef<string>('')
+
+  const fitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const syncPtySize = useCallback((cols: number, rows: number) => {
     void window.electronAPI?.terminalResize(id, cols, rows)
   }, [id])
 
   const manualFit = useCallback(() => {
-    const term = termRef.current
-    const fitAddon = fitAddonRef.current
-    if (!term || !fitAddon) return
-
-    const dims = fitAddon.proposeDimensions()
-    if (dims && dims.cols > 0 && dims.rows > 0) {
-      term.resize(dims.cols, dims.rows)
-      syncPtySize(dims.cols, dims.rows)
+    if (fitTimeoutRef.current) {
+      clearTimeout(fitTimeoutRef.current)
     }
+    fitTimeoutRef.current = setTimeout(() => {
+      const term = termRef.current
+      const fitAddon = fitAddonRef.current
+      if (!term || !fitAddon) return
+
+      const dims = fitAddon.proposeDimensions()
+      if (dims && dims.cols > 0 && dims.rows > 0) {
+        term.resize(dims.cols, dims.rows)
+        syncPtySize(dims.cols, dims.rows)
+      }
+      fitTimeoutRef.current = null
+    }, 100)
   }, [syncPtySize])
 
   const initTerminal = useCallback(() => {
     if (!containerRef.current || termRef.current) return
-
-    let isTypingCommand = false
-    let lastDataTime = 0
 
     const term = new Terminal({
       fontSize: settings.fontSize,
@@ -91,6 +99,10 @@ export function XTerm({ id, settings, onData }: XTermProps): JSX.Element {
       onDataRef.current(id, data)
     })
 
+    term.onKey((e) => {
+      onKeyRef.current?.(id, e)
+    })
+
     // Save selection on change, auto-copy to clipboard
     term.onSelectionChange(() => {
       const selection = term.getSelection()
@@ -109,16 +121,16 @@ export function XTerm({ id, settings, onData }: XTermProps): JSX.Element {
   useEffect(() => {
     initTerminal()
 
-    const handleResize = () => {
-      manualFit()
-    }
-
-    window.addEventListener('resize', handleResize)
+    window.addEventListener('resize', manualFit)
     return () => {
-      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('resize', manualFit)
       termRef.current?.dispose()
       termRef.current = null
       fitAddonRef.current = null
+      if (fitTimeoutRef.current) {
+        clearTimeout(fitTimeoutRef.current)
+        fitTimeoutRef.current = null
+      }
     }
   }, [initTerminal, manualFit])
 
@@ -154,11 +166,8 @@ export function XTerm({ id, settings, onData }: XTermProps): JSX.Element {
 
   // Listen for resize events from parent
   useEffect(() => {
-    const handleResize = () => {
-      manualFit()
-    }
-    window.addEventListener('terminal:resize', handleResize)
-    return () => { window.removeEventListener('terminal:resize', handleResize) }
+    window.addEventListener('terminal:resize', manualFit)
+    return () => { window.removeEventListener('terminal:resize', manualFit) }
   }, [manualFit])
 
   // ResizeObserver for container size changes

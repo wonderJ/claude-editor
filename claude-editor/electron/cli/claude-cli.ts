@@ -9,6 +9,11 @@ export interface CliMessage {
   content: string
   images?: string[] | undefined
   id: string
+  model?: string
+  provider?: string
+  streamingEnabled?: boolean
+  thinkingMode?: string
+  mentionedFiles?: string[]
 }
 
 export interface CliResponse {
@@ -48,7 +53,6 @@ export class ClaudeCliManager {
     }
 
     try {
-      // Determine CLI path - look for claude-code CLI in common locations
       const cliPath = this.findCliPath()
       if (!cliPath) {
         this.setStatus('error')
@@ -89,6 +93,7 @@ export class ClaudeCliManager {
 
       this.setStatus('online')
       this.restartAttempts = 0
+
       return true
     } catch (err) {
       this.setStatus('error')
@@ -112,7 +117,6 @@ export class ClaudeCliManager {
 
   sendMessage(message: CliMessage): boolean {
     if (!this.process || this.process.killed) {
-      this.onErrorCallback?.('CLI not running')
       return false
     }
 
@@ -134,6 +138,7 @@ export class ClaudeCliManager {
 
     for (const line of lines) {
       if (!line.trim()) continue
+
       try {
         const response = JSON.parse(line) as CliResponse
         if (response.type === 'thinking') {
@@ -173,7 +178,6 @@ export class ClaudeCliManager {
 
     for (const candidate of candidates) {
       try {
-        // Simple check if command exists in PATH
         const result = execSync(
           process.platform === 'win32' ? `where ${candidate}` : `which ${candidate}`,
           { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
