@@ -1,21 +1,3 @@
-# Root-level ignores
-.npm-cache/
-.pnpm/
-node-v22*.msi
-pnpm.exe
-install-pnpm.ps1
-
-# IDE
-.idea/
-
-# Chat / roadmap JSON files (generated)
-chat_*.json
-roadmap_*.json
-tmp_chat_report.json
-
-# Golutra agent files
-.golutra/
-
 # Logs
 logs
 *.log
@@ -42,6 +24,7 @@ build
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+.idea
 .DS_Store
 *.suo
 *.ntvs*
