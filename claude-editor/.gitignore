@@ -1,0 +1,71 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+dist-ssr
+dist-electron
+out
+release
+build
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Electron
+*.asar
+*.app
+*.exe
+*.dmg
+*.deb
+*.rpm
+*.snap
+*.AppImage
+*.blockmap
+*.7z
+*.zip
+*.tar.gz
+
+# Cache
+.cache
+.eslintcache
+.parcel-cache
+.next
+.nuxt
+.temp
+*.tsbuildinfo
+
+# Testing
+coverage
+*.lcov
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Misc
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/

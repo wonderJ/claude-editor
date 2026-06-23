@@ -1,0 +1,17 @@
+# Root-level ignores
+.npm-cache/
+.pnpm/
+node-v22*.msi
+pnpm.exe
+install-pnpm.ps1
+
+# IDE
+.idea/
+
+# Chat / roadmap JSON files (generated)
+chat_*.json
+roadmap_*.json
+tmp_chat_report.json
+
+# Golutra agent files
+.golutra/
