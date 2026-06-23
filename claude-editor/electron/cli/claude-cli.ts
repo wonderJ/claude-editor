@@ -49,44 +49,54 @@ export class ClaudeCliManager {
 
   start(): boolean {
     if (this.process && !this.process.killed) {
+      console.log('[CLI] Already running, skip start')
       return true
     }
 
     try {
       const cliPath = this.findCliPath()
+      console.log('[CLI] findCliPath result:', cliPath)
       if (!cliPath) {
         this.setStatus('error')
         this.onErrorCallback?.('Claude Code CLI not found. Install with: npm install -g @anthropic-ai/claude-code')
         return false
       }
 
+      console.log('[CLI] Spawning:', cliPath, 'cwd:', os.homedir(), 'shell: true')
       this.process = spawn(cliPath, [], {
         cwd: os.homedir(),
         env: { ...process.env, CLAUDE_CODE_JSON_MODE: '1' },
         shell: true,
       })
+      console.log('[CLI] Spawn returned, pid:', this.process.pid)
 
       this.process.stdout.on('data', (data: Buffer) => {
-        this.handleStdout(data.toString())
+        const str = data.toString()
+        console.log('[CLI] stdout:', str.slice(0, 200))
+        this.handleStdout(str)
       })
 
       this.process.stderr.on('data', (data: Buffer) => {
         const err = data.toString().trim()
+        console.log('[CLI] stderr:', err.slice(0, 200))
         if (err) {
           this.onErrorCallback?.(err)
         }
       })
 
-      this.process.on('exit', (code) => {
+      this.process.on('exit', (code, signal) => {
+        console.log('[CLI] exit, code:', code, 'signal:', signal)
         this.setStatus('offline')
         this.process = null
         if (code !== 0 && this.restartAttempts < this.maxRestarts) {
           this.restartAttempts++
+          console.log('[CLI] Auto-restart attempt', this.restartAttempts)
           setTimeout(() => this.start(), 2000)
         }
       })
 
       this.process.on('error', (err) => {
+        console.log('[CLI] process error:', err.message)
         this.setStatus('error')
         this.onErrorCallback?.('CLI process error: ' + err.message)
       })
@@ -96,6 +106,7 @@ export class ClaudeCliManager {
 
       return true
     } catch (err) {
+      console.log('[CLI] start exception:', err)
       this.setStatus('error')
       this.onErrorCallback?.('Failed to start CLI: ' + String(err))
       return false

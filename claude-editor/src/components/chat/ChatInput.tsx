@@ -41,7 +41,7 @@ export function ChatInput(): JSX.Element {
   }, [inputValue, isLoading, pendingImages, sendImageMessage])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
@@ -223,7 +223,7 @@ export function ChatInput(): JSX.Element {
           <textarea
             ref={textareaRef}
             className="min-h-[24px] max-h-[200px] w-full resize-none bg-transparent text-sm text-[#DFE1E5] placeholder-[#5C5C5C] outline-none"
-            placeholder="Ask Claude... (Ctrl+Enter to send, @ to mention file)"
+            placeholder="Ask Claude... (Enter to send, Shift+Enter newline, @ to mention file)"
             value={inputValue}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
