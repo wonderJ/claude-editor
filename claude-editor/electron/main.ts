@@ -288,7 +288,7 @@ ipcMain.handle('terminal:kill', (_event, id: string) => {
 cliManager.setCallbacks(
   (response: CliResponse) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('cli:data', response)
+      mainWindow.webContents.send('cli:raw-data', response.content)
     }
   },
   (status) => {
@@ -322,6 +322,24 @@ ipcMain.handle('cli:send', (_event, message: { type: string; content: string; im
   const typedMessage = message as { type: 'message' | 'image'; content: string; images?: string[] | undefined; id: string }
   const result = cliManager.sendMessage(typedMessage)
   return { success: result }
+})
+
+ipcMain.handle('cli:write', (_event, data: string) => {
+  try {
+    cliManager.write(data)
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('cli:resize', (_event, cols: number, rows: number) => {
+  try {
+    cliManager.resize(cols, rows)
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
 })
 
 ipcMain.handle('cli:status', () => {

@@ -25,11 +25,15 @@ export interface ElectronAPI {
   cliStart: () => Promise<{ success: boolean }>
   cliStop: () => Promise<{ success: boolean }>
   cliRestart: () => Promise<{ success: boolean }>
+  cliWrite: (data: string) => Promise<{ success: boolean } | { error: string }>
+  cliResize: (cols: number, rows: number) => Promise<{ success: boolean } | { error: string }>
   cliSend: (message: { type: string; content: string; images?: string[] | undefined; id: string }) => Promise<{ success: boolean }>
   cliStatus: () => Promise<{ status: string }>
   onCliData: (callback: (response: { type: string; content: string; done: boolean; messageId: string }) => void) => () => void
+  onCliRawData: (callback: (data: string) => void) => () => void
   onCliStatus: (callback: (status: string) => void) => () => void
   onCliError: (callback: (error: string) => void) => () => void
+  onCliExit: (callback: () => void) => () => void
   // Window controls
   windowMinimize: () => void
   windowMaximize: () => void
@@ -78,6 +82,8 @@ const api: ElectronAPI = {
   cliStart: () => ipcRenderer.invoke('cli:start'),
   cliStop: () => ipcRenderer.invoke('cli:stop'),
   cliRestart: () => ipcRenderer.invoke('cli:restart'),
+  cliWrite: (data: string) => ipcRenderer.invoke('cli:write', data),
+  cliResize: (cols: number, rows: number) => ipcRenderer.invoke('cli:resize', cols, rows),
   cliSend: (message) => ipcRenderer.invoke('cli:send', message),
   cliStatus: () => ipcRenderer.invoke('cli:status'),
   onCliData: (callback) => {
@@ -86,6 +92,13 @@ const api: ElectronAPI = {
     const off = ipcRenderer.removeListener.bind(ipcRenderer)
     on('cli:data', handler)
     return () => { off('cli:data', handler) }
+  },
+  onCliRawData: (callback) => {
+    const handler = (_event: unknown, data: string) => { callback(data) }
+    const on = ipcRenderer.on.bind(ipcRenderer)
+    const off = ipcRenderer.removeListener.bind(ipcRenderer)
+    on('cli:raw-data', handler)
+    return () => { off('cli:raw-data', handler) }
   },
   onCliStatus: (callback) => {
     const handler = (_event: unknown, status: string) => { callback(status) }
@@ -100,6 +113,13 @@ const api: ElectronAPI = {
     const off = ipcRenderer.removeListener.bind(ipcRenderer)
     on('cli:error', handler)
     return () => { off('cli:error', handler) }
+  },
+  onCliExit: (callback) => {
+    const handler = () => { callback() }
+    const on = ipcRenderer.on.bind(ipcRenderer)
+    const off = ipcRenderer.removeListener.bind(ipcRenderer)
+    on('cli:exit', handler)
+    return () => { off('cli:exit', handler) }
   },
   // Window controls
   windowMinimize: () => ipcRenderer.send('window:minimize'),
