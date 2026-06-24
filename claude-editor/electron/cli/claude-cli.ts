@@ -140,24 +140,38 @@ export class ClaudeCliManager {
     }
   }
 
-  write(data: string): void {
-    if (!this.pty) return
-    this.pty.write(data)
-  }
-
-  resize(cols: number, rows: number): void {
-    if (!this.pty) return
-    this.pty.resize(cols, rows)
-  }
-
   private handleStdout(data: string): void {
-    // Send raw terminal data directly for xterm.js rendering
-    this.onDataCallback?.({
-      type: 'text',
-      content: data,
-      done: false,
-      messageId: 'raw-' + String(Date.now()),
-    })
+    // For interactive mode, we get raw terminal output with ANSI codes
+    // Strip ANSI codes for parsing
+    const clean = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+    console.log('[CLI] clean data:', clean.slice(0, 200))
+
+    this.buffer += clean
+    const lines = this.buffer.split('\n')
+    this.buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (!line.trim()) continue
+
+      // Try JSON first (if claude outputs JSON)
+      try {
+        const response = JSON.parse(line) as CliResponse
+        if (response.type === 'thinking') {
+          this.setStatus('thinking')
+        } else if (response.done) {
+          this.setStatus('online')
+        }
+        this.onDataCallback?.(response)
+      } catch {
+        // Not JSON, treat as plain text stream
+        this.onDataCallback?.({
+          type: 'text',
+          content: line,
+          done: false,
+          messageId: 'stream-' + String(Date.now()),
+        })
+      }
+    }
   }
 
   private setStatus(status: CliStatus): void {

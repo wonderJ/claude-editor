@@ -5,7 +5,8 @@ import { useLayoutStore } from '../../stores/layoutStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useCliStore } from '../../stores/cliStore'
 import { useFileStore } from '../../stores/fileStore'
-import { ClaudeTerminal } from './ClaudeTerminal'
+import { ChatMessages } from './ChatMessages'
+import { ChatInput } from './ChatInput'
 
 export function ChatPanel(): JSX.Element {
   const { chatVisible, chatWidth, toggleChat } = useLayoutStore()
@@ -18,6 +19,15 @@ export function ChatPanel(): JSX.Element {
 
   // Listen for CLI events
   useEffect(() => {
+    const cleanupData = window.electronAPI?.onCliData((response) => {
+      if (response.type === 'text' || response.type === 'thinking') {
+        appendStream(response.messageId, response.content)
+      }
+      if (response.done) {
+        finishStream(response.messageId)
+      }
+    })
+
     const cleanupStatus = window.electronAPI?.onCliStatus((newStatus) => {
       setStatus(newStatus as 'offline' | 'online' | 'thinking' | 'error')
     })
@@ -27,10 +37,11 @@ export function ChatPanel(): JSX.Element {
     })
 
     return () => {
+      cleanupData?.()
       cleanupStatus?.()
       cleanupError?.()
     }
-  }, [setStatus, setError])
+  }, [appendStream, finishStream, setStatus, setError, addToast])
 
   // Auto-start CLI when chat panel opens
   useEffect(() => {
@@ -189,7 +200,8 @@ export function ChatPanel(): JSX.Element {
         </div>
       )}
 
-      <ClaudeTerminal id="claude-main" />
+      <ChatMessages />
+      <ChatInput />
     </div>
   )
 }
