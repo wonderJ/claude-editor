@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 export interface ElectronAPI {
   platform: string
@@ -21,6 +21,8 @@ export interface ElectronAPI {
   terminalKill: (id: string) => Promise<{ success: boolean } | { error: string }>
   onTerminalData: (callback: (id: string, data: string) => void) => () => void
   onTerminalExit: (callback: (id: string) => void) => () => void
+  // Resolve a dropped File's absolute path (Electron 32+ replaces File.path with webUtils)
+  getPathForFile: (file: File) => string
   // CLI
   cliStart: () => Promise<{ success: boolean }>
   cliStop: () => Promise<{ success: boolean }>
@@ -75,6 +77,7 @@ const api: ElectronAPI = {
     on('terminal:exit', handler)
     return () => { off('terminal:exit', handler) }
   },
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   cliStart: () => ipcRenderer.invoke('cli:start'),
   cliStop: () => ipcRenderer.invoke('cli:stop'),
   cliRestart: () => ipcRenderer.invoke('cli:restart'),

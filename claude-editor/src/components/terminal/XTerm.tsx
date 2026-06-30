@@ -222,6 +222,49 @@ export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element 
     }
   }, [])
 
+  // Drag & drop image files: write absolute path into the PTY so `claude` CLI can read it.
+  // Electron exposes the local absolute path via File.path, so no temp file is needed.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    }
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault()
+      const files = e.dataTransfer?.files
+      if (!files || files.length === 0) return
+
+      const paths: string[] = []
+      for (const file of Array.from(files)) {
+        // Electron 32+ removed File.path; resolve the absolute path via webUtils (exposed in preload).
+        const filePath = window.electronAPI?.getPathForFile?.(file) ?? ''
+        if (filePath && IMAGE_EXT.test(filePath)) {
+          paths.push(filePath)
+        }
+      }
+      if (paths.length === 0) return
+
+      // Quote paths containing spaces so the CLI parses them as single tokens.
+      const text = paths.map(p => (/\s/.test(p) ? `"${p}"` : p)).join(' ')
+      // Write through the PTY (not term.paste) so it lands at the CLI input prompt.
+      onDataRef.current(id, text + ' ')
+      termRef.current?.focus()
+    }
+
+    el.addEventListener('dragover', handleDragOver)
+    el.addEventListener('drop', handleDrop)
+    return () => {
+      el.removeEventListener('dragover', handleDragOver)
+      el.removeEventListener('drop', handleDrop)
+    }
+  }, [id])
+
   // Expose resize and focus methods for parent
   useEffect(() => {
     const el = containerRef.current
