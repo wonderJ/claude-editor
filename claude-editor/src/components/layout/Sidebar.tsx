@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import { Folder, MessageSquare, Search, Settings } from 'lucide-react'
+import { Folder, Search, Settings } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layoutStore'
 import { FileTree } from '../file-tree/FileTree'
 
@@ -51,16 +51,6 @@ export function Sidebar(): JSX.Element {
             }}
           >
             <Search size={18} />
-          </button>
-          <button
-            type="button"
-            className="flex h-8 w-8 items-center justify-center rounded text-[#8C8C8C] hover:bg-[#3C3F41] hover:text-[#DFE1E5]"
-            title="Chat"
-            onClick={() => {
-              useLayoutStore.getState().toggleChat()
-            }}
-          >
-            <MessageSquare size={18} />
           </button>
           <button
             type="button"

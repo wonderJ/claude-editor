@@ -1,10 +1,9 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import type { JSX } from 'react'
-import { ChevronUp, Settings, Send } from 'lucide-react'
+import { ChevronUp, Settings } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layoutStore'
 import { useTerminalStore } from '../../stores/terminalStore'
 import { useFileStore } from '../../stores/fileStore'
-import { useChatStore } from '../../stores/chatStore'
 import { TerminalTabBar } from './TerminalTabBar'
 import { XTerm } from './XTerm'
 
@@ -27,10 +26,7 @@ export function TerminalPanel(): JSX.Element {
   } = useTerminalStore()
 
   const { addToast } = useFileStore()
-  const { setInputValue } = useChatStore()
   const [showSettings, setShowSettings] = useState(false)
-  const [showContextMenu, setShowContextMenu] = useState(false)
-  const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 })
   const xtermContainerRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   const isCollapsed = terminalCollapsed || terminalHeight <= 40
@@ -117,34 +113,6 @@ export function TerminalPanel(): JSX.Element {
     }
   }, [])
 
-  // Context menu: send to Claude
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    setContextMenuPos({ x: e.clientX, y: e.clientY })
-    setShowContextMenu(true)
-  }, [])
-
-  const handleSendToClaude = useCallback(() => {
-    const activeTab = tabs.find(t => t.id === activeTabId)
-    if (!activeTab) return
-    // Send last command or selected content to Claude
-    // For now, send a placeholder message
-    const lastCommand = activeTab.history[activeTab.history.length - 1]
-    if (lastCommand) {
-      setInputValue(`Explain this command: \`${lastCommand}\``)
-      addToast({ message: 'Sent to Claude input', type: 'success' })
-    }
-    setShowContextMenu(false)
-  }, [tabs, activeTabId, setInputValue, addToast])
-
-  // Close context menu on click outside
-  useEffect(() => {
-    if (!showContextMenu) return
-    const handleClick = () => setShowContextMenu(false)
-    document.addEventListener('click', handleClick)
-    return () => document.removeEventListener('click', handleClick)
-  }, [showContextMenu])
-
   if (!terminalVisible) {
     return <div className="hidden" />
   }
@@ -219,7 +187,7 @@ export function TerminalPanel(): JSX.Element {
 
       {/* Terminal instances */}
       {!isCollapsed && (
-        <div className="relative flex-1 overflow-hidden" onContextMenu={handleContextMenu}>
+        <div className="relative flex-1 overflow-hidden">
           {tabs.map((tab) => (
             <div
               key={tab.id}
@@ -240,23 +208,6 @@ export function TerminalPanel(): JSX.Element {
               />
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Context menu */}
-      {showContextMenu && (
-        <div
-          className="fixed z-50 rounded border border-[#4E5254] bg-[#2B2D30] py-1 shadow-lg"
-          style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
-        >
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[#DFE1E5] hover:bg-[#3574F0]"
-            onClick={handleSendToClaude}
-          >
-            <Send size={12} />
-            Send to Claude
-          </button>
         </div>
       )}
     </div>

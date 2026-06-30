@@ -23,15 +23,6 @@ export interface ElectronAPI {
   onTerminalExit: (callback: (id: string) => void) => () => void
   // Resolve a dropped File's absolute path (Electron 32+ replaces File.path with webUtils)
   getPathForFile: (file: File) => string
-  // CLI
-  cliStart: () => Promise<{ success: boolean }>
-  cliStop: () => Promise<{ success: boolean }>
-  cliRestart: () => Promise<{ success: boolean }>
-  cliSend: (message: { type: string; content: string; images?: string[] | undefined; id: string }) => Promise<{ success: boolean }>
-  cliStatus: () => Promise<{ status: string }>
-  onCliData: (callback: (response: { type: string; content: string; done: boolean; messageId: string }) => void) => () => void
-  onCliStatus: (callback: (status: string) => void) => () => void
-  onCliError: (callback: (error: string) => void) => () => void
   // Window controls
   windowMinimize: () => void
   windowMaximize: () => void
@@ -78,32 +69,6 @@ const api: ElectronAPI = {
     return () => { off('terminal:exit', handler) }
   },
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
-  cliStart: () => ipcRenderer.invoke('cli:start'),
-  cliStop: () => ipcRenderer.invoke('cli:stop'),
-  cliRestart: () => ipcRenderer.invoke('cli:restart'),
-  cliSend: (message) => ipcRenderer.invoke('cli:send', message),
-  cliStatus: () => ipcRenderer.invoke('cli:status'),
-  onCliData: (callback) => {
-    const handler = (_event: unknown, response: { type: string; content: string; done: boolean; messageId: string }) => { callback(response) }
-    const on = ipcRenderer.on.bind(ipcRenderer)
-    const off = ipcRenderer.removeListener.bind(ipcRenderer)
-    on('cli:data', handler)
-    return () => { off('cli:data', handler) }
-  },
-  onCliStatus: (callback) => {
-    const handler = (_event: unknown, status: string) => { callback(status) }
-    const on = ipcRenderer.on.bind(ipcRenderer)
-    const off = ipcRenderer.removeListener.bind(ipcRenderer)
-    on('cli:status', handler)
-    return () => { off('cli:status', handler) }
-  },
-  onCliError: (callback) => {
-    const handler = (_event: unknown, error: string) => { callback(error) }
-    const on = ipcRenderer.on.bind(ipcRenderer)
-    const off = ipcRenderer.removeListener.bind(ipcRenderer)
-    on('cli:error', handler)
-    return () => { off('cli:error', handler) }
-  },
   // Window controls
   windowMinimize: () => ipcRenderer.send('window:minimize'),
   windowMaximize: () => ipcRenderer.send('window:maximize'),

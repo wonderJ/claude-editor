@@ -17,12 +17,6 @@ interface LayoutState {
   toggleTerminal: () => void
   setTerminalCollapsed: (collapsed: boolean) => void
 
-  // Chat panel
-  chatVisible: boolean
-  chatWidth: number
-  setChatWidth: (width: number) => void
-  toggleChat: () => void
-
   // Status bar
   statusMessage: string
   cursorLine: number
@@ -39,10 +33,6 @@ const DEFAULT_SIDEBAR_WIDTH = 250
 const MIN_TERMINAL_HEIGHT = 150
 const DEFAULT_TERMINAL_HEIGHT = 200
 const TERMINAL_COLLAPSED_HEIGHT = 32
-
-const MIN_CHAT_WIDTH = 300
-const MAX_CHAT_WIDTH = 500
-const DEFAULT_CHAT_WIDTH = 350
 
 export const useLayoutStore = create<LayoutState>((set, get) => ({
   sidebarVisible: true,
@@ -81,17 +71,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     } else {
       set({ terminalCollapsed: false, terminalHeight: DEFAULT_TERMINAL_HEIGHT })
     }
-  },
-
-  chatVisible: false,
-  chatWidth: DEFAULT_CHAT_WIDTH,
-  setChatWidth: (width) => {
-    const w = Math.max(MIN_CHAT_WIDTH, Math.min(MAX_CHAT_WIDTH, width))
-    set({ chatWidth: w })
-  },
-  toggleChat: () => {
-    const { chatVisible } = get()
-    set({ chatVisible: !chatVisible })
   },
 
   statusMessage: 'Ready',

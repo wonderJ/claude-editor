@@ -3,7 +3,6 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import type { IPty } from 'node-pty'
-import { cliManager, type CliResponse } from './cli/claude-cli'
 
 const require = createRequire(import.meta.url)
 const { spawn } = require('node-pty') as typeof import('node-pty')
@@ -282,50 +281,6 @@ ipcMain.handle('terminal:kill', (_event, id: string) => {
   } catch (err) {
     return { error: (err as Error).message }
   }
-})
-
-// CLI IPC handlers
-cliManager.setCallbacks(
-  (response: CliResponse) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('cli:data', response)
-    }
-  },
-  (status) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('cli:status', status)
-    }
-  },
-  (error) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('cli:error', error)
-    }
-  }
-)
-
-ipcMain.handle('cli:start', () => {
-  const result = cliManager.start()
-  return { success: result }
-})
-
-ipcMain.handle('cli:stop', () => {
-  cliManager.stop()
-  return { success: true }
-})
-
-ipcMain.handle('cli:restart', () => {
-  const result = cliManager.restart()
-  return { success: result }
-})
-
-ipcMain.handle('cli:send', (_event, message: { type: string; content: string; images?: string[] | undefined; id: string }) => {
-  const typedMessage = message as { type: 'message' | 'image'; content: string; images?: string[] | undefined; id: string }
-  const result = cliManager.sendMessage(typedMessage)
-  return { success: result }
-})
-
-ipcMain.handle('cli:status', () => {
-  return { status: cliManager.getStatus() }
 })
 
 void app.whenReady().then(() => {

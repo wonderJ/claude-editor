@@ -7,7 +7,6 @@ import { useEditorStore } from '../../stores/editorStore'
 import { Sidebar } from './Sidebar'
 import { EditorArea } from './EditorArea'
 import { TerminalPanel } from '../terminal/TerminalPanel'
-import { ChatPanel } from '../chat/ChatPanel'
 import { StatusBar } from './StatusBar'
 import { ResizableSplitter } from './ResizableSplitter'
 
@@ -164,10 +163,6 @@ export function MainLayout(): JSX.Element {
     terminalCollapsed,
     setTerminalHeight,
     setTerminalCollapsed,
-    chatVisible,
-    chatWidth,
-    setChatWidth,
-    toggleChat,
     toggleSidebar,
     toggleTerminal,
   } = useLayoutStore()
@@ -217,14 +212,6 @@ export function MainLayout(): JSX.Element {
       }
     },
     [terminalHeight, setTerminalHeight, setTerminalCollapsed]
-  )
-
-  const handleChatResize = useCallback(
-    (delta: number) => {
-      const newWidth = chatWidth - delta
-      setChatWidth(Math.max(300, Math.min(500, newWidth)))
-    },
-    [chatWidth, setChatWidth]
   )
 
   // ── Menu definitions ──
@@ -353,16 +340,6 @@ export function MainLayout(): JSX.Element {
         ],
       },
       {
-        label: 'Claude',
-        children: [
-          { label: 'New Chat', action: () => { if (!chatVisible) toggleChat(); window.dispatchEvent(new CustomEvent('chat:new')) } },
-          { label: 'Send File to Claude', action: () => { addToast({ message: 'Send File coming soon', type: 'info' }) } },
-          { divider: true } as MenuItem,
-          { label: 'View History', action: () => { window.dispatchEvent(new CustomEvent('chat:history')) } },
-          { label: 'Settings', action: () => { window.dispatchEvent(new CustomEvent('app:settings')) } },
-        ],
-      },
-      {
         label: 'Terminal',
         children: [
           { label: 'New Terminal', action: () => { toggleTerminal(); addTab() } },
@@ -381,7 +358,7 @@ export function MainLayout(): JSX.Element {
         ],
       },
     ]
-  }, [addToast, setRootPath, getActiveTab, markSaved, closeTab, toggleSidebar, toggleTerminal, toggleChat, chatVisible, addTab])
+  }, [addToast, setRootPath, getActiveTab, markSaved, closeTab, toggleSidebar, toggleTerminal, addTab])
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -532,17 +509,6 @@ export function MainLayout(): JSX.Element {
           <div className="flex flex-1 overflow-hidden">
             {/* Editor */}
             <EditorArea />
-
-            {/* Chat splitter */}
-            {chatVisible && (
-              <ResizableSplitter
-                direction="horizontal"
-                onResize={handleChatResize}
-              />
-            )}
-
-            {/* Chat panel */}
-            <ChatPanel />
           </div>
 
           {/* Terminal splitter */}
