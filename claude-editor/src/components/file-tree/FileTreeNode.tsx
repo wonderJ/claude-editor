@@ -1,9 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import { useFileStore, type FileNode } from '../../stores/fileStore'
 import { useEditorStore } from '../../stores/editorStore'
+import { useHistoryStore } from '../../stores/historyStore'
 import { FileIcon, FolderIcon } from './FileIcons'
 import { ContextMenu } from './ContextMenu'
+import { ConfirmDialog } from '../common/ConfirmDialog'
+import { PromptDialog } from '../common/PromptDialog'
+import {
+  copyReference,
+  generateUniquePath,
+  getParentPath,
+  isImageFile,
+  openInExplorer,
+  pasteInto,
+} from '../../lib/fileTreeActions'
 
 interface FileTreeNodeProps {
   node: FileNode
@@ -11,11 +22,29 @@ interface FileTreeNodeProps {
 }
 
 export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
-  const { expandedPaths, selectedPath, toggleExpanded, setSelected, addToast, refresh, updateNodeChildren, renameExpandedPath } = useFileStore()
+  const {
+    rootPath,
+    expandedPaths,
+    selectedPath,
+    clipboard,
+    toggleExpanded,
+    setSelected,
+    setClipboard,
+    clearClipboard,
+    addToast,
+    refresh,
+    updateNodeChildren,
+    renameExpandedPath,
+  } = useFileStore()
   const { openTab } = useEditorStore()
+  const { open: openHistory } = useHistoryStore()
   const isExpanded = expandedPaths.has(node.path)
   const isSelected = selectedPath === node.path
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [newFileOpen, setNewFileOpen] = useState(false)
+  const [newFolderOpen, setNewFolderOpen] = useState(false)
 
   const paddingLeft = String(depth * 16 + 4) + 'px'
 
@@ -23,22 +52,28 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
     setSelected(node.path)
     if (node.isDirectory) {
       toggleExpanded(node.path)
-      // Load children if not already loaded
       if (!node.children || node.children.length === 0) {
         void loadChildren(node.path, updateNodeChildren, addToast)
       }
     }
   }
 
-  const handleDoubleClick = () => {
-    if (node.isFile) {
-      void loadFileToEditor(node.path, node.name, openTab, addToast)
+  const handleOpen = () => {
+    if (!node.isFile) return
+    if (isImageFile(node.name)) {
+      openTab(node.path, node.name, '')
+      return
     }
+    void loadFileToEditor(node.path, node.name, openTab, addToast)
   }
 
-  const handleNewFile = async () => {
-    if (!window.electronAPI) return
-    const newPath = await generateUniquePath(node.path, 'new-file.txt', window.electronAPI.readDir)
+  const handleDoubleClick = () => {
+    handleOpen()
+  }
+
+  const doCreateFile = async (name: string) => {
+    if (!name || !window.electronAPI) return
+    const newPath = await generateUniquePath(node.path, name)
     const result = await window.electronAPI.createFile(newPath)
     if ('error' in result) {
       addToast({ message: result.error, type: 'error' })
@@ -48,9 +83,9 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
     }
   }
 
-  const handleNewFolder = async () => {
-    if (!window.electronAPI) return
-    const newPath = await generateUniquePath(node.path, 'new-folder', window.electronAPI.readDir)
+  const doCreateFolder = async (name: string) => {
+    if (!name || !window.electronAPI) return
+    const newPath = await generateUniquePath(node.path, name)
     const result = await window.electronAPI.createDir(newPath)
     if ('error' in result) {
       addToast({ message: result.error, type: 'error' })
@@ -60,13 +95,10 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
     }
   }
 
-  const handleRename = async () => {
-    if (!window.electronAPI) return
-    const newName = prompt('Enter new name:', node.name)
-    if (!newName || newName === node.name) return
-    const lastSep = Math.max(node.path.lastIndexOf('/'), node.path.lastIndexOf('\\'))
-    const parentPath = node.path.slice(0, lastSep)
-    const newPath = parentPath + (parentPath.endsWith('/') || parentPath.endsWith('\\') ? '' : '/') + newName
+  const doRename = async (newName: string) => {
+    if (!newName || newName === node.name || !window.electronAPI) return
+    const parentPath = getParentPath(node.path)
+    const newPath = joinPathLocal(parentPath, newName)
     const result = await window.electronAPI.rename(node.path, newPath)
     if ('error' in result) {
       addToast({ message: result.error, type: 'error' })
@@ -77,9 +109,8 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
     }
   }
 
-  const handleDelete = async () => {
+  const doDelete = async () => {
     if (!window.electronAPI) return
-    if (!confirm(`Are you sure you want to delete "${node.name}"?`)) return
     const result = await window.electronAPI.delete(node.path)
     if ('error' in result) {
       addToast({ message: result.error, type: 'error' })
@@ -89,31 +120,91 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
     }
   }
 
-  const handleCopyPath = () => {
-    navigator.clipboard.writeText(node.path).then(() => {
-      addToast({ message: 'Path copied to clipboard', type: 'success' })
-    }).catch(() => {
-      addToast({ message: 'Failed to copy path', type: 'error' })
-    })
+  const handleCut = () => {
+    setClipboard({ path: node.path, mode: 'cut' })
+    addToast({ message: 'Cut', type: 'info', duration: 1500 })
   }
+
+  const handleCopy = () => {
+    setClipboard({ path: node.path, mode: 'copy' })
+    addToast({ message: 'Copied', type: 'info', duration: 1500 })
+  }
+
+  const handlePaste = async () => {
+    if (!clipboard) return
+    const targetDir = node.isDirectory ? node.path : getParentPath(node.path)
+    const ok = await pasteInto(targetDir, clipboard.path, clipboard.mode, addToast)
+    if (ok) {
+      if (clipboard.mode === 'cut') clearClipboard()
+      refresh()
+    }
+  }
+
+  const handleCopyPath = () => {
+    navigator.clipboard.writeText(node.path).then(
+      () => { addToast({ message: 'Path copied to clipboard', type: 'success' }) },
+      () => { addToast({ message: 'Failed to copy path', type: 'error' }) }
+    )
+  }
+
+  const handleCopyReference = () => {
+    copyReference(rootPath, node.path, addToast)
+  }
+
+  const handleOpenInExplorer = () => {
+    void openInExplorer(node.path, addToast)
+  }
+
+  const handleShowHistory = () => {
+    openHistory(node.path, node.name)
+  }
+
+  const canPaste = Boolean(clipboard && clipboard.path !== node.path)
+
+  const commonItems = [
+    { label: node.isFile && isImageFile(node.name) ? 'Preview Image' : 'Open', action: handleOpen },
+    { separator: true, label: '', action: () => {} },
+    { label: 'Cut', action: handleCut, shortcut: 'Ctrl+X' },
+    { label: 'Copy', action: handleCopy, shortcut: 'Ctrl+C' },
+    { label: 'Paste', action: handlePaste, shortcut: 'Ctrl+V', disabled: !canPaste },
+    { separator: true, label: '', action: () => {} },
+    { label: 'Copy Path', action: handleCopyPath, shortcut: 'Ctrl+Shift+C' },
+    { label: 'Copy Reference', action: handleCopyReference },
+    { separator: true, label: '', action: () => {} },
+    { label: 'Rename', action: () => { setRenameOpen(true) }, shortcut: 'Shift+F6' },
+    { label: 'Delete', action: () => { setConfirmDelete(true) }, danger: true, shortcut: 'Del' },
+    { separator: true, label: '', action: () => {} },
+    { label: 'Open in Explorer', action: handleOpenInExplorer, shortcut: 'Ctrl+Shift+O' },
+    { label: 'Show History', action: handleShowHistory },
+  ]
 
   const menuItems = node.isDirectory
     ? [
-        { label: 'New File', icon: '📄', action: handleNewFile },
-        { label: 'New Folder', icon: '📁', action: handleNewFolder },
+        { label: 'New File', action: () => { setNewFileOpen(true) } },
+        { label: 'New Folder', action: () => { setNewFolderOpen(true) } },
         { separator: true, label: '', action: () => {} },
-        { label: 'Rename', icon: '✏️', action: handleRename },
-        { label: 'Delete', icon: '🗑️', action: handleDelete, danger: true },
+        ...commonItems.filter((it) => it.label !== 'Open'),
         { separator: true, label: '', action: () => {} },
-        { label: 'Copy Path', icon: '📋', action: handleCopyPath },
-        { label: 'Refresh', icon: '🔄', action: refresh },
+        { label: 'Refresh', action: refresh },
       ]
-    : [
-        { label: 'Rename', icon: '✏️', action: handleRename },
-        { label: 'Delete', icon: '🗑️', action: handleDelete, danger: true },
-        { separator: true, label: '', action: () => {} },
-        { label: 'Copy Path', icon: '📋', action: handleCopyPath },
-      ]
+    : commonItems
+
+  useEffect(() => {
+    const onRename = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (detail === node.path) setRenameOpen(true)
+    }
+    const onDelete = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (detail === node.path) setConfirmDelete(true)
+    }
+    window.addEventListener('filetree:rename', onRename)
+    window.addEventListener('filetree:delete', onDelete)
+    return () => {
+      window.removeEventListener('filetree:rename', onRename)
+      window.removeEventListener('filetree:delete', onDelete)
+    }
+  }, [node.path])
 
   return (
     <div>
@@ -156,6 +247,63 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
         />
       )}
 
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete"
+          message={`Delete ${node.isDirectory ? 'folder' : 'file'} "${node.name}"?`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          danger
+          onConfirm={() => {
+            setConfirmDelete(false)
+            void doDelete()
+          }}
+          onCancel={() => { setConfirmDelete(false) }}
+        />
+      )}
+
+      {renameOpen && (
+        <PromptDialog
+          title="Rename"
+          defaultValue={node.name}
+          confirmText="Rename"
+          cancelText="Cancel"
+          onConfirm={(value) => {
+            setRenameOpen(false)
+            void doRename(value)
+          }}
+          onCancel={() => { setRenameOpen(false) }}
+        />
+      )}
+
+      {newFileOpen && (
+        <PromptDialog
+          title="New File"
+          defaultValue="new-file.txt"
+          confirmText="Create"
+          cancelText="Cancel"
+          onConfirm={(value) => {
+            setNewFileOpen(false)
+            void doCreateFile(value)
+          }}
+          onCancel={() => { setNewFileOpen(false) }}
+        />
+      )}
+
+      {newFolderOpen && (
+        <PromptDialog
+          title="New Folder"
+          defaultValue="new-folder"
+          confirmText="Create"
+          cancelText="Cancel"
+          onConfirm={(value) => {
+            setNewFolderOpen(false)
+            void doCreateFolder(value)
+          }}
+          onCancel={() => { setNewFolderOpen(false) }}
+        />
+      )}
+
       {node.isDirectory && isExpanded && node.children && (
         <div>
           {node.children.map((child) => (
@@ -165,6 +313,11 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
       )}
     </div>
   )
+}
+
+function joinPathLocal(parent: string, name: string): string {
+  const sep = parent.endsWith('/') || parent.endsWith('\\') ? '' : '/'
+  return parent + sep + name
 }
 
 async function loadChildren(
@@ -216,27 +369,4 @@ async function loadFileToEditor(
   }
   openTab(path, name, result.content)
   addToast({ message: `Opened ${name}`, type: 'info', duration: 2000 })
-}
-
-async function generateUniquePath(
-  parentPath: string,
-  baseName: string,
-  readDir: (path: string) => Promise<{ name: string }[] | { error: string }>
-): Promise<string> {
-  const result = await readDir(parentPath)
-  if ('error' in result) {
-    return parentPath + (parentPath.endsWith('/') || parentPath.endsWith('\\') ? '' : '/') + baseName
-  }
-  const existingNames = new Set(result.map((e) => e.name))
-  if (!existingNames.has(baseName)) {
-    return parentPath + (parentPath.endsWith('/') || parentPath.endsWith('\\') ? '' : '/') + baseName
-  }
-  const dotIndex = baseName.lastIndexOf('.')
-  const namePart = dotIndex > 0 ? baseName.slice(0, dotIndex) : baseName
-  const extPart = dotIndex > 0 ? baseName.slice(dotIndex) : ''
-  let idx = 1
-  while (existingNames.has(`${namePart}-${String(idx)}${extPart}`)) {
-    idx++
-  }
-  return parentPath + (parentPath.endsWith('/') || parentPath.endsWith('\\') ? '' : '/') + `${namePart}-${String(idx)}${extPart}`
 }

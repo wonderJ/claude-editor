@@ -48,6 +48,8 @@ function getLanguageFromPath(path: string): string {
   return (map[ext] ?? ext) || 'plaintext'
 }
 
+const MAX_TABS = 30
+
 export const useEditorStore = create<EditorStore>((set, get) => ({
   tabs: [],
   activeTabPath: null,
@@ -60,6 +62,12 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       set({ activeTabPath: path })
       return
     }
+    let nextTabs = [...tabs]
+    while (nextTabs.length >= MAX_TABS) {
+      const idx = nextTabs.findIndex((t) => !t.isModified)
+      const removeIdx = idx >= 0 ? idx : 0
+      nextTabs.splice(removeIdx, 1)
+    }
     const newTab: EditorTab = {
       path,
       name,
@@ -69,7 +77,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       isModified: false,
       isReadOnly: false,
     }
-    set({ tabs: [...tabs, newTab], activeTabPath: path })
+    set({ tabs: [...nextTabs, newTab], activeTabPath: path })
   },
 
   closeTab: (path) => {

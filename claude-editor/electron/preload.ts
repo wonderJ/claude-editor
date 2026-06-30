@@ -14,6 +14,14 @@ export interface ElectronAPI {
   delete: (path: string) => Promise<{ success: boolean } | { error: string }>
   readFile: (path: string) => Promise<{ content: string } | { error: string }>
   writeFile: (path: string, content: string) => Promise<{ success: boolean } | { error: string }>
+  readFileBase64: (path: string) => Promise<{ data: string; mime: string } | { error: string }>
+  copyPath: (src: string, dest: string) => Promise<{ success: boolean } | { error: string }>
+  openInExplorer: (path: string) => Promise<{ success: boolean } | { error: string }>
+  // History
+  historySetRoot: (root: string | null) => Promise<{ success: boolean }>
+  historyList: (filePath: string) => Promise<{ versions: HistoryVersion[] } | { error: string }>
+  historyRead: (filePath: string, versionId: string) => Promise<{ content: string } | { error: string }>
+  historyRollback: (filePath: string, versionId: string) => Promise<{ content: string } | { error: string }>
   // Terminal
   terminalCreate: (id: string, cwd: string) => Promise<{ success: boolean } | { error: string }>
   terminalWrite: (id: string, data: string) => Promise<{ success: boolean } | { error: string }>
@@ -37,6 +45,12 @@ export interface DirEntry {
   isFile: boolean
 }
 
+export interface HistoryVersion {
+  id: string
+  timestamp: number
+  size: number
+}
+
 const api: ElectronAPI = {
   platform: process.platform,
   version: process.versions.electron,
@@ -50,6 +64,13 @@ const api: ElectronAPI = {
   delete: (path: string) => ipcRenderer.invoke('fs:delete', path),
   readFile: (path: string) => ipcRenderer.invoke('fs:readFile', path),
   writeFile: (path: string, content: string) => ipcRenderer.invoke('fs:writeFile', path, content),
+  readFileBase64: (path: string) => ipcRenderer.invoke('fs:readFileBase64', path),
+  copyPath: (src: string, dest: string) => ipcRenderer.invoke('fs:copyPath', src, dest),
+  openInExplorer: (path: string) => ipcRenderer.invoke('fs:openInExplorer', path),
+  historySetRoot: (root) => ipcRenderer.invoke('history:setRoot', root),
+  historyList: (filePath) => ipcRenderer.invoke('history:list', filePath),
+  historyRead: (filePath, versionId) => ipcRenderer.invoke('history:read', filePath, versionId),
+  historyRollback: (filePath, versionId) => ipcRenderer.invoke('history:rollback', filePath, versionId),
   terminalCreate: (id: string, cwd: string) => ipcRenderer.invoke('terminal:create', id, cwd),
   terminalWrite: (id: string, data: string) => ipcRenderer.invoke('terminal:write', id, data),
   terminalResize: (id: string, cols: number, rows: number) => ipcRenderer.invoke('terminal:resize', id, cols, rows),

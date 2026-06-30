@@ -7,6 +7,8 @@ interface ContextMenuItem {
   action: () => void
   separator?: boolean
   danger?: boolean
+  shortcut?: string
+  disabled?: boolean
 }
 
 interface ContextMenuProps {
@@ -70,9 +72,10 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps): JSX.Ele
           <button
             key={idx}
             type="button"
+            disabled={item.disabled}
             className={[
               'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm',
-              'hover:bg-[#3574F0] hover:text-white',
+              'hover:bg-[#3574F0] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#DFE1E5]',
               item.danger ? 'text-[#E53E3E] hover:bg-[#E53E3E] hover:text-white' : 'text-[#DFE1E5]',
             ].join(' ')}
             onClick={() => {
@@ -81,7 +84,8 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps): JSX.Ele
             }}
           >
             {item.icon && <span className="text-xs">{item.icon}</span>}
-            <span>{item.label}</span>
+            <span className="flex-1">{item.label}</span>
+            {item.shortcut && <span className="text-[10px] text-[#8C8C8C]">{item.shortcut}</span>}
           </button>
         )
       )}

@@ -4,20 +4,25 @@ import { useEditorStore } from '../../stores/editorStore'
 import { useFileStore } from '../../stores/fileStore'
 import { TabBar } from './TabBar'
 import { MonacoEditor } from './MonacoEditor'
+import { ImagePreviewPanel } from './ImagePreviewPanel'
 import { WelcomePage } from './WelcomePage'
+import { isImageFile } from '../../lib/fileTreeActions'
 
 export function EditorPanel(): JSX.Element {
   const { tabs, activeTabPath, isLoading, openTab } = useEditorStore()
   const { selectedPath } = useFileStore()
 
-  // Open file from file tree when selected path changes
   useEffect(() => {
     if (!selectedPath) return
+    const name = selectedPath.split(/[\\/]/).pop() ?? selectedPath
+    if (isImageFile(selectedPath)) {
+      openTab(selectedPath, name, '')
+      return
+    }
     const loadFile = async () => {
       if (!window.electronAPI) return
       const result = await window.electronAPI.readFile(selectedPath)
       if ('content' in result) {
-        const name = selectedPath.split(/[\\/]/).pop() ?? selectedPath
         openTab(selectedPath, name, result.content)
       }
     }
@@ -25,6 +30,7 @@ export function EditorPanel(): JSX.Element {
   }, [selectedPath, openTab])
 
   const activeTab = tabs.find((t) => t.path === activeTabPath)
+  const isImage = activeTab ? isImageFile(activeTab.path) : false
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-[#1E1F22]">
@@ -36,11 +42,15 @@ export function EditorPanel(): JSX.Element {
             Loading...
           </div>
         ) : activeTab ? (
-          <MonacoEditor
-            path={activeTab.path}
-            content={activeTab.content}
-            language={activeTab.language}
-          />
+          isImage ? (
+            <ImagePreviewPanel path={activeTab.path} name={activeTab.name} />
+          ) : (
+            <MonacoEditor
+              path={activeTab.path}
+              content={activeTab.content}
+              language={activeTab.language}
+            />
+          )
         ) : (
           <WelcomePage />
         )}

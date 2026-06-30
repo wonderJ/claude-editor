@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import { createRequire } from 'node:module'
 import type { IPty } from 'node-pty'
 
@@ -170,8 +171,145 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
 
 ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string) => {
   try {
+    await snapshotIfChanged(filePath, content)
     await fs.promises.writeFile(filePath, content, 'utf-8')
     return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('fs:readFileBase64', async (_event, filePath: string) => {
+  try {
+    const buf = await fs.promises.readFile(filePath)
+    const ext = path.extname(filePath).slice(1).toLowerCase()
+    const mime = IMAGE_MIME[ext] ?? 'application/octet-stream'
+    return { data: buf.toString('base64'), mime }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('fs:copyPath', async (_event, src: string, dest: string) => {
+  try {
+    await fs.promises.cp(src, dest, { recursive: true, errorOnExist: false, force: true })
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('fs:openInExplorer', async (_event, targetPath: string) => {
+  try {
+    shell.showItemInFolder(targetPath)
+    return { success: true }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+// ── Edit history snapshots ──────────────────────────────────────────────
+
+interface HistoryVersion {
+  id: string
+  timestamp: number
+  size: number
+}
+
+interface HistoryMeta {
+  originalPath: string
+  versions: HistoryVersion[]
+}
+
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+}
+
+let historyRoot: string | null = null
+
+function historyDirFor(filePath: string): string | null {
+  if (!historyRoot) return null
+  const hash = crypto.createHash('sha1').update(filePath).digest('hex').slice(0, 16)
+  return path.join(historyRoot, '.claude-editor', 'history', hash)
+}
+
+function isInsideHistory(filePath: string): boolean {
+  return filePath.includes(`${path.sep}.claude-editor${path.sep}`)
+}
+
+async function readMeta(dir: string): Promise<HistoryMeta | null> {
+  try {
+    const raw = await fs.promises.readFile(path.join(dir, 'meta.json'), 'utf-8')
+    return JSON.parse(raw) as HistoryMeta
+  } catch {
+    return null
+  }
+}
+
+async function snapshotIfChanged(filePath: string, incoming: string): Promise<void> {
+  if (isInsideHistory(filePath)) return
+  const dir = historyDirFor(filePath)
+  if (!dir) return
+  let existing: string
+  try {
+    existing = await fs.promises.readFile(filePath, 'utf-8')
+  } catch {
+    return
+  }
+  if (existing === incoming) return
+
+  await fs.promises.mkdir(dir, { recursive: true })
+  const now = new Date()
+  const id = now.toISOString().replace(/[:.]/g, '-')
+  await fs.promises.writeFile(path.join(dir, `${id}.snap`), existing, 'utf-8')
+
+  const meta = (await readMeta(dir)) ?? { originalPath: filePath, versions: [] }
+  meta.originalPath = filePath
+  meta.versions.push({
+    id,
+    timestamp: now.getTime(),
+    size: Buffer.byteLength(existing, 'utf-8'),
+  })
+  await fs.promises.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8')
+}
+
+ipcMain.handle('history:setRoot', (_event, root: string | null) => {
+  historyRoot = root
+  return { success: true }
+})
+
+ipcMain.handle('history:list', async (_event, filePath: string) => {
+  const dir = historyDirFor(filePath)
+  if (!dir) return { versions: [] }
+  const meta = await readMeta(dir)
+  const versions = meta ? [...meta.versions].sort((a, b) => b.timestamp - a.timestamp) : []
+  return { versions }
+})
+
+ipcMain.handle('history:read', async (_event, filePath: string, versionId: string) => {
+  const dir = historyDirFor(filePath)
+  if (!dir) return { error: 'No history root' }
+  try {
+    const content = await fs.promises.readFile(path.join(dir, `${versionId}.snap`), 'utf-8')
+    return { content }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('history:rollback', async (_event, filePath: string, versionId: string) => {
+  const dir = historyDirFor(filePath)
+  if (!dir) return { error: 'No history root' }
+  try {
+    const content = await fs.promises.readFile(path.join(dir, `${versionId}.snap`), 'utf-8')
+    await snapshotIfChanged(filePath, content)
+    await fs.promises.writeFile(filePath, content, 'utf-8')
+    return { content }
   } catch (err) {
     return { error: (err as Error).message }
   }

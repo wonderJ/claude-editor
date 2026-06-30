@@ -6,14 +6,14 @@ export function TabBar(): JSX.Element {
   const { tabs, activeTabPath, switchTab, closeTab } = useEditorStore()
 
   return (
-    <div className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[#4E5254] bg-[#2B2D30] px-1">
+    <div className="flex max-h-32 shrink-0 flex-wrap items-center gap-0.5 overflow-y-auto border-b border-[#4E5254] bg-[#2B2D30] px-1 py-0.5">
       {tabs.map((tab) => {
         const isActive = tab.path === activeTabPath
         return (
           <div
             key={tab.path}
             className={[
-              'flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-t px-2 text-xs',
+              'flex h-7 cursor-pointer items-center gap-1.5 rounded-t px-2 text-xs',
               'select-none transition-colors duration-150',
               isActive
                 ? 'bg-[#1E1F22] text-[#DFE1E5] border-b-2 border-[#3574F0]'

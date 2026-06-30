@@ -17,6 +17,11 @@ export interface Toast {
   duration?: number
 }
 
+export interface ClipboardEntry {
+  path: string
+  mode: 'cut' | 'copy'
+}
+
 interface FileStore {
   rootPath: string | null
   files: FileNode[]
@@ -24,6 +29,7 @@ interface FileStore {
   expandedPaths: Set<string>
   isLoading: boolean
   toasts: Toast[]
+  clipboard: ClipboardEntry | null
 
   setRootPath: (path: string | null) => void
   setFiles: (files: FileNode[]) => void
@@ -34,6 +40,8 @@ interface FileStore {
   removeToast: (id: string) => void
   renameExpandedPath: (oldPath: string, newPath: string) => void
   refresh: () => void
+  setClipboard: (entry: ClipboardEntry | null) => void
+  clearClipboard: () => void
 }
 
 let refreshTimeout: ReturnType<typeof setTimeout> | null = null
@@ -45,6 +53,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
   expandedPaths: new Set(),
   isLoading: false,
   toasts: [],
+  clipboard: null,
 
   setRootPath: (path) => {
     if (refreshTimeout) {
@@ -53,6 +62,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
     }
     set({ rootPath: path, files: [], selectedPath: null, expandedPaths: new Set() })
     if (path) {
+      if (window.electronAPI) void window.electronAPI.historySetRoot(path)
       get().refresh()
     }
   },
@@ -129,6 +139,8 @@ export const useFileStore = create<FileStore>((set, get) => ({
       void loadDirectory(rootPath, get().setFiles, get().addToast)
     }, 100)
   },
+  setClipboard: (entry) => { set({ clipboard: entry }) },
+  clearClipboard: () => { set({ clipboard: null }) },
 }))
 
 function updateNodeChildren(nodes: FileNode[], path: string, children: FileNode[]): FileNode[] {

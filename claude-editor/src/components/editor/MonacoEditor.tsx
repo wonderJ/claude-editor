@@ -56,6 +56,7 @@ export function MonacoEditor({ path, content, language }: MonacoEditorProps): JS
         tabSize: 2,
         insertSpaces: true,
         wordWrap: 'on',
+        unusualLineTerminators: 'auto',
       }}
       loading={
         <div className="flex h-full items-center justify-center text-sm text-[#8C8C8C]">
