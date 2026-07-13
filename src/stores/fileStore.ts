@@ -1,0 +1,196 @@
+import { create } from 'zustand'
+
+export interface FileNode {
+  name: string
+  path: string
+  isDirectory: boolean
+  isFile: boolean
+  children?: FileNode[] | undefined
+  expanded?: boolean | undefined
+  selected?: boolean | undefined
+}
+
+export interface Toast {
+  id: string
+  message: string
+  type: 'success' | 'error' | 'warning' | 'info'
+  duration?: number
+}
+
+export interface ClipboardEntry {
+  path: string
+  mode: 'cut' | 'copy'
+}
+
+interface FileStore {
+  rootPath: string | null
+  files: FileNode[]
+  selectedPath: string | null
+  expandedPaths: Set<string>
+  isLoading: boolean
+  toasts: Toast[]
+  clipboard: ClipboardEntry | null
+
+  setRootPath: (path: string | null) => void
+  setFiles: (files: FileNode[]) => void
+  updateNodeChildren: (path: string, children: FileNode[]) => void
+  toggleExpanded: (path: string) => void
+  setSelected: (path: string | null) => void
+  addToast: (toast: Omit<Toast, 'id'>) => void
+  removeToast: (id: string) => void
+  renameExpandedPath: (oldPath: string, newPath: string) => void
+  refresh: () => void
+  setClipboard: (entry: ClipboardEntry | null) => void
+  clearClipboard: () => void
+}
+
+let refreshTimeout: ReturnType<typeof setTimeout> | null = null
+
+export const useFileStore = create<FileStore>((set, get) => ({
+  rootPath: null,
+  files: [],
+  selectedPath: null,
+  expandedPaths: new Set(),
+  isLoading: false,
+  toasts: [],
+  clipboard: null,
+
+  setRootPath: (path) => {
+    if (refreshTimeout) {
+      clearTimeout(refreshTimeout)
+      refreshTimeout = null
+    }
+    set({ rootPath: path, files: [], selectedPath: null, expandedPaths: new Set() })
+    if (path) {
+      if (window.electronAPI) void window.electronAPI.historySetRoot(path)
+      get().refresh()
+    }
+    // Wire git repo (dynamic import avoids circular dependency with gitStore).
+    void import('./gitStore').then(({ useGitStore }) => {
+      useGitStore.getState().setRepoPath(path)
+    })
+  },
+
+  setFiles: (files) => {
+    set({ files })
+  },
+
+  updateNodeChildren: (path: string, children: FileNode[]) => {
+    set((state) => ({
+      files: updateNodeChildren(state.files, path, children),
+    }))
+  },
+
+  toggleExpanded: (path) => {
+    const { expandedPaths } = get()
+    const next = new Set(expandedPaths)
+    if (next.has(path)) {
+      next.delete(path)
+    } else {
+      next.add(path)
+    }
+    set({ expandedPaths: next })
+  },
+
+  setSelected: (path) => {
+    set({ selectedPath: path })
+  },
+
+  addToast: (toast) => {
+    const id = Math.random().toString(36).slice(2)
+    const duration = toast.duration ?? (toast.type === 'success' ? 3000 : 5000)
+    set((s) => ({ toasts: [...s.toasts, { ...toast, id }] }))
+    setTimeout(() => {
+      get().removeToast(id)
+    }, duration)
+  },
+
+  removeToast: (id) => {
+    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
+  },
+
+  renameExpandedPath: (oldPath, newPath) => {
+    set((state) => {
+      const next = new Set(state.expandedPaths)
+      const matched: string[] = []
+      for (const p of next) {
+        if (p === oldPath || p.startsWith(oldPath + '/') || p.startsWith(oldPath + '\\')) {
+          matched.push(p)
+        }
+      }
+      for (const p of matched) {
+        next.delete(p)
+        if (p === oldPath) {
+          next.add(newPath)
+        } else {
+          const suffix = p.slice(oldPath.length)
+          next.add(newPath + suffix)
+        }
+      }
+      return { expandedPaths: next }
+    })
+  },
+
+  refresh: () => {
+    const { rootPath } = get()
+    if (!rootPath) return
+
+    if (refreshTimeout) {
+      clearTimeout(refreshTimeout)
+    }
+    refreshTimeout = setTimeout(() => {
+      refreshTimeout = null
+      void loadDirectory(rootPath, get().setFiles, get().addToast)
+    }, 100)
+  },
+  setClipboard: (entry) => { set({ clipboard: entry }) },
+  clearClipboard: () => { set({ clipboard: null }) },
+}))
+
+function updateNodeChildren(nodes: FileNode[], path: string, children: FileNode[]): FileNode[] {
+  return nodes.map((node) => {
+    if (node.path === path) {
+      return { ...node, children }
+    }
+    if (node.children) {
+      return { ...node, children: updateNodeChildren(node.children, path, children) }
+    }
+    return node
+  })
+}
+
+async function loadDirectory(
+  dirPath: string,
+  setFiles: (files: FileNode[]) => void,
+  addToast: (toast: Omit<Toast, 'id'>) => void
+): Promise<void> {
+  if (!window.electronAPI) {
+    addToast({ message: 'Electron API not available', type: 'error' })
+    return
+  }
+
+  const result = await window.electronAPI.readDir(dirPath)
+  if ('error' in result) {
+    addToast({ message: `Failed to read directory: ${result.error}`, type: 'error' })
+    return
+  }
+
+  const entries = Array.isArray(result) ? result : []
+  const sorted = entries.sort((a, b) => {
+    if (a.isDirectory && !b.isDirectory) return -1
+    if (!a.isDirectory && b.isDirectory) return 1
+    return a.name.localeCompare(b.name)
+  })
+
+  const nodes: FileNode[] = sorted.map((entry) => ({
+    name: entry.name,
+    path: entry.path,
+    isDirectory: entry.isDirectory,
+    isFile: entry.isFile,
+    children: entry.isDirectory ? [] : undefined,
+    expanded: false,
+    selected: false,
+  }))
+
+  setFiles(nodes)
+}
