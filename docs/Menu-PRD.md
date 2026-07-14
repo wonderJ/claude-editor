@@ -236,6 +236,7 @@
 6. **国际化预留**：菜单文本通过 i18n key 定义，支持后续多语言
 7. **危险操作确认**：Discard Changes 等会丢失数据的操作需弹窗二次确认
 8. **左侧边栏 Git 工具窗口（IDEA 风格）**：Activity Bar 底部始终显示 Commit/Git 入口；Commit 面板按 `Changes` / `Unversioned files` 分组展示文件，支持勾选纳入提交、Amend 重写上一次提交、Commit/Commit and Push；Git 面板 Log 视图展示分支树（HEAD/Local/Remote/Tags）与提交时间线，支持搜索、过滤与 Commit details；非 Git 仓库时显示 "Not a Git repository" 占位。
+9.  npx vite build 完成后需要编译通过
 
 ---
 
