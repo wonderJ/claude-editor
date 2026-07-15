@@ -76,7 +76,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     if (collapsed) {
       set({ terminalCollapsed: true, terminalHeight: TERMINAL_COLLAPSED_HEIGHT })
     } else {
-      set({ terminalCollapsed: false })
+      const { terminalHeight } = get()
+      const nextHeight = terminalHeight <= TERMINAL_COLLAPSED_HEIGHT ? DEFAULT_TERMINAL_HEIGHT : terminalHeight
+      set({ terminalCollapsed: false, terminalHeight: nextHeight })
     }
   },
 
