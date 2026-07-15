@@ -74,7 +74,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   },
   setTerminalCollapsed: (collapsed) => {
     if (collapsed) {
-      set({ terminalCollapsed: true, terminalHeight: TERMINAL_COLLAPSED_HEIGHT })
+      // Preserve terminalHeight so the PTY/xterm dimensions stay stable while
+      // hidden; the panel visually collapses via CSS, without resizing the shell.
+      set({ terminalCollapsed: true })
     } else {
       const { terminalHeight } = get()
       const nextHeight = terminalHeight <= TERMINAL_COLLAPSED_HEIGHT ? DEFAULT_TERMINAL_HEIGHT : terminalHeight
