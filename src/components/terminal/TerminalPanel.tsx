@@ -244,14 +244,14 @@ export function TerminalPanel(): JSX.Element {
         </div>
       )}
 
-      {/* Terminal instances: keep mounted and at full size when collapsed so
-          xterm/ConPTY are not resized and do not repaint the screen on expand. */}
+      {/* Terminal instances: keep mounted and at a fixed size so xterm/ConPTY
+          are not resized and do not repaint the screen on collapse/expand. */}
       <div
         className={[
-          'relative overflow-hidden',
-          isCollapsed ? 'opacity-0 pointer-events-none' : 'flex-1',
+          'absolute left-0 top-8 w-full overflow-hidden',
+          isCollapsed ? 'opacity-0 pointer-events-none' : '',
         ].join(' ')}
-        style={{ height: isCollapsed ? terminalHeight : undefined }}
+        style={{ height: Math.max(terminalHeight - 32, 100) }}
       >
         {tabs.map((tab) => (
           <div
