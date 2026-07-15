@@ -39,8 +39,12 @@ export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element 
 
       const dims = fitAddon.proposeDimensions()
       if (dims && dims.cols > 0 && dims.rows > 0) {
-        term.resize(dims.cols, dims.rows)
-        syncPtySize(dims.cols, dims.rows)
+        // Avoid redundant resizes: xterm.resize() clears and re-renders, which
+        // makes ConPTY repaint the entire screen so old content appears duplicated.
+        if (term.cols !== dims.cols || term.rows !== dims.rows) {
+          term.resize(dims.cols, dims.rows)
+          syncPtySize(dims.cols, dims.rows)
+        }
       }
       fitTimeoutRef.current = null
     }, 100)
