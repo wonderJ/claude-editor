@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import { DiffEditor } from '@monaco-editor/react'
 import { useEditorStore } from '../../stores/editorStore'
@@ -7,11 +7,12 @@ import { TabBar } from './TabBar'
 import { MonacoEditor } from './MonacoEditor'
 import { ImagePreviewPanel } from './ImagePreviewPanel'
 import { WelcomePage } from './WelcomePage'
-import { isImageFile } from '../../lib/fileTreeActions'
+import { getBaseName, isImageFile } from '../../lib/fileTreeActions'
 
 export function EditorPanel(): JSX.Element {
   const { tabs, activeTabPath, isLoading, openTab } = useEditorStore()
   const { selectedPath } = useFileStore()
+  const [isDragOver, setIsDragOver] = useState(false)
 
   useEffect(() => {
     if (!selectedPath) return
@@ -30,11 +31,53 @@ export function EditorPanel(): JSX.Element {
     void loadFile()
   }, [selectedPath, openTab])
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    if (!window.electronAPI) return
+
+    const dt = e.dataTransfer
+    if (!dt?.files?.length) return
+
+    for (const file of Array.from(dt.files)) {
+      const filePath = window.electronAPI.getPathForFile(file)
+      if (!filePath) continue
+      const name = getBaseName(filePath)
+      if (isImageFile(filePath)) {
+        openTab(filePath, name, '')
+      } else {
+        const result = await window.electronAPI.readFile(filePath)
+        if ('content' in result) {
+          openTab(filePath, name, result.content)
+        }
+      }
+    }
+  }
+
   const activeTab = tabs.find((t) => t.path === activeTabPath)
   const isImage = activeTab ? isImageFile(activeTab.path) : false
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-[#1E1F22]">
+    <div
+      className={[
+        'flex flex-1 flex-col overflow-hidden bg-[#1E1F22]',
+        isDragOver ? 'bg-[#3574F0]/10' : '',
+      ].join(' ')}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <TabBar />
 
       <div className="flex-1 overflow-hidden">

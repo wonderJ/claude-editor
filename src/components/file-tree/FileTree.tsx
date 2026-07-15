@@ -1,4 +1,5 @@
 import { FolderOpen, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
 import type { JSX } from 'react'
 import { useFileStore } from '../../stores/fileStore'
 import { useHistoryStore } from '../../stores/historyStore'
@@ -8,6 +9,8 @@ import { ToastContainer } from './ToastContainer'
 import {
   copyReference,
   findNode,
+  generateUniquePath,
+  getBaseName,
   getParentPath,
   openInExplorer,
   pasteInto,
@@ -27,6 +30,7 @@ export function FileTree(): JSX.Element {
     isLoading,
   } = useFileStore()
   const { openPath, openName, close: closeHistory } = useHistoryStore()
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const handleOpenFolder = () => {
     if (!window.electronAPI) return
@@ -90,6 +94,56 @@ export function FileTree(): JSX.Element {
     }
   }
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (!rootPath) return
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const getDropTargetDirectory = (): string | null => {
+    if (!rootPath) return null
+    if (!selectedPath) return rootPath
+    const node = findNode(files, selectedPath)
+    if (!node) return rootPath
+    return node.isDirectory ? node.path : getParentPath(node.path)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    if (!rootPath || !window.electronAPI) return
+
+    const dt = e.dataTransfer
+    if (!dt?.files?.length) return
+
+    const targetDir = getDropTargetDirectory()
+    if (!targetDir) return
+
+    const fileList = Array.from(dt.files)
+    let copied = 0
+    for (const file of fileList) {
+      const filePath = window.electronAPI.getPathForFile(file)
+      if (!filePath) continue
+      const dest = await generateUniquePath(targetDir, getBaseName(filePath))
+      const result = await window.electronAPI.copyPath(filePath, dest)
+      if ('error' in result) {
+        addToast({ message: `Failed to copy ${getBaseName(filePath)}: ${result.error}`, type: 'error' })
+      } else {
+        copied++
+      }
+    }
+    if (copied > 0) {
+      addToast({ message: `Copied ${copied} file${copied === 1 ? '' : 's'}`, type: 'success' })
+      refresh()
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <ToastContainer />
@@ -118,9 +172,15 @@ export function FileTree(): JSX.Element {
 
       {/* Content */}
       <div
-        className="flex-1 overflow-auto p-1 outline-none"
+        className={[
+          'flex-1 overflow-auto p-1 outline-none transition-colors',
+          isDragOver ? 'bg-[#3574F0]/20' : '',
+        ].join(' ')}
         tabIndex={0}
         onKeyDown={handleKeyDown}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         {!rootPath ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-[#8C8C8C]">
