@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, webFrame } from 'electron'
 
 export interface ElectronAPI {
   platform: string
@@ -24,6 +24,8 @@ export interface ElectronAPI {
   historyRollback: (filePath: string, versionId: string) => Promise<{ content: string } | { error: string }>
   // Git
   gitIsRepo: (repoPath: string) => Promise<{ isRepo: boolean }>
+  gitInit: (repoPath: string) => Promise<{ success: boolean } | { error: string }>
+  gitClone: (url: string, targetPath: string) => Promise<{ success: boolean } | { error: string }>
   gitStatus: (repoPath: string) => Promise<{ status: GitStatus } | { error: string }>
   gitDiff: (repoPath: string, filePath: string, mode: DiffMode) => Promise<{ original: string; modified: string } | { error: string }>
   gitStage: (repoPath: string, filePaths: string[]) => Promise<{ success: boolean } | { error: string }>
@@ -33,6 +35,9 @@ export interface ElectronAPI {
   gitPush: (repoPath: string, remote?: string, branch?: string) => Promise<{ success: boolean } | { error: string }>
   gitPull: (repoPath: string, remote?: string, branch?: string) => Promise<{ success: boolean } | { error: string }>
   gitFetch: (repoPath: string, remote?: string) => Promise<{ success: boolean } | { error: string }>
+  gitRemotes: (repoPath: string) => Promise<{ remotes: { name: string; url: string }[] } | { error: string }>
+  gitRemoteAdd: (repoPath: string, name: string, url: string) => Promise<{ success: boolean } | { error: string }>
+  gitRemoteRemove: (repoPath: string, name: string) => Promise<{ success: boolean } | { error: string }>
   gitBranches: (repoPath: string) => Promise<{ branches: GitBranch[] } | { error: string }>
   gitBranchCreate: (repoPath: string, name: string, startPoint?: string) => Promise<{ success: boolean } | { error: string }>
   gitBranchCheckout: (repoPath: string, name: string) => Promise<{ success: boolean } | { error: string }>
@@ -48,10 +53,15 @@ export interface ElectronAPI {
   onTerminalExit: (callback: (id: string) => void) => () => void
   // Resolve a dropped File's absolute path (Electron 32+ replaces File.path with webUtils)
   getPathForFile: (file: File) => string
+  // Read file paths from clipboard when files are copied in Explorer
+  readClipboardFilePaths: () => Promise<string[]>
   // Window controls
   windowMinimize: () => void
   windowMaximize: () => void
   windowClose: () => void
+  setZoomFactor: (factor: number) => void
+  getZoomFactor: () => number
+  resetZoom: () => void
   onWindowMaximized: (callback: (maximized: boolean) => void) => () => void
 }
 
@@ -133,6 +143,8 @@ const api: ElectronAPI = {
   historyRead: (filePath, versionId) => ipcRenderer.invoke('history:read', filePath, versionId),
   historyRollback: (filePath, versionId) => ipcRenderer.invoke('history:rollback', filePath, versionId),
   gitIsRepo: (repoPath) => ipcRenderer.invoke('git:isRepo', repoPath),
+  gitInit: (repoPath) => ipcRenderer.invoke('git:init', repoPath),
+  gitClone: (url, targetPath) => ipcRenderer.invoke('git:clone', url, targetPath),
   gitStatus: (repoPath) => ipcRenderer.invoke('git:status', repoPath),
   gitDiff: (repoPath, filePath, mode) => ipcRenderer.invoke('git:diff', repoPath, filePath, mode),
   gitStage: (repoPath, filePaths) => ipcRenderer.invoke('git:stage', repoPath, filePaths),
@@ -142,6 +154,9 @@ const api: ElectronAPI = {
   gitPush: (repoPath, remote, branch) => ipcRenderer.invoke('git:push', repoPath, remote, branch),
   gitPull: (repoPath, remote, branch) => ipcRenderer.invoke('git:pull', repoPath, remote, branch),
   gitFetch: (repoPath, remote) => ipcRenderer.invoke('git:fetch', repoPath, remote),
+  gitRemotes: (repoPath) => ipcRenderer.invoke('git:remotes', repoPath),
+  gitRemoteAdd: (repoPath, name, url) => ipcRenderer.invoke('git:remoteAdd', repoPath, name, url),
+  gitRemoteRemove: (repoPath, name) => ipcRenderer.invoke('git:remoteRemove', repoPath, name),
   gitBranches: (repoPath) => ipcRenderer.invoke('git:branches', repoPath),
   gitBranchCreate: (repoPath, name, startPoint) => ipcRenderer.invoke('git:branchCreate', repoPath, name, startPoint),
   gitBranchCheckout: (repoPath, name) => ipcRenderer.invoke('git:branchCheckout', repoPath, name),
@@ -167,10 +182,14 @@ const api: ElectronAPI = {
     return () => { off('terminal:exit', handler) }
   },
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  readClipboardFilePaths: () => ipcRenderer.invoke('clipboard:readFilePaths'),
   // Window controls
   windowMinimize: () => ipcRenderer.send('window:minimize'),
   windowMaximize: () => ipcRenderer.send('window:maximize'),
   windowClose: () => ipcRenderer.send('window:close'),
+  setZoomFactor: (factor) => { webFrame.setZoomFactor(factor) },
+  getZoomFactor: () => webFrame.getZoomFactor(),
+  resetZoom: () => { webFrame.setZoomFactor(1) },
   onWindowMaximized: (callback) => {
     const handler = (_event: unknown, maximized: boolean) => { callback(maximized) }
     const on = ipcRenderer.on.bind(ipcRenderer)

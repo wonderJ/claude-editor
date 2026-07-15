@@ -18,6 +18,7 @@ interface LayoutState {
   setTerminalHeight: (height: number) => void
   toggleTerminal: () => void
   setTerminalCollapsed: (collapsed: boolean) => void
+  setTerminalVisible: (visible: boolean) => void
 
   // Status bar
   statusMessage: string
@@ -75,8 +76,12 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     if (collapsed) {
       set({ terminalCollapsed: true, terminalHeight: TERMINAL_COLLAPSED_HEIGHT })
     } else {
-      set({ terminalCollapsed: false, terminalHeight: DEFAULT_TERMINAL_HEIGHT })
+      set({ terminalCollapsed: false })
     }
+  },
+
+  setTerminalVisible: (visible) => {
+    set({ terminalVisible: visible })
   },
 
   statusMessage: 'Ready',

@@ -132,7 +132,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   refresh: () => {
-    const { rootPath } = get()
+    const { rootPath, expandedPaths, selectedPath } = get()
     if (!rootPath) return
 
     if (refreshTimeout) {
@@ -140,7 +140,9 @@ export const useFileStore = create<FileStore>((set, get) => ({
     }
     refreshTimeout = setTimeout(() => {
       refreshTimeout = null
-      void loadDirectory(rootPath, get().setFiles, get().addToast)
+      void refreshDirectory(rootPath, expandedPaths, selectedPath, get().addToast).then((nodes) => {
+        get().setFiles(nodes)
+      })
     }, 100)
   },
   setClipboard: (entry) => { set({ clipboard: entry }) },
@@ -159,20 +161,17 @@ function updateNodeChildren(nodes: FileNode[], path: string, children: FileNode[
   })
 }
 
-async function loadDirectory(
+async function refreshDirectory(
   dirPath: string,
-  setFiles: (files: FileNode[]) => void,
-  addToast: (toast: Omit<Toast, 'id'>) => void
-): Promise<void> {
-  if (!window.electronAPI) {
-    addToast({ message: 'Electron API not available', type: 'error' })
-    return
-  }
-
+  expandedPaths: Set<string>,
+  selectedPath: string | null,
+  addToast: (toast: { message: string; type: 'success' | 'error' | 'warning' | 'info'; duration?: number }) => void
+): Promise<FileNode[]> {
+  if (!window.electronAPI) return []
   const result = await window.electronAPI.readDir(dirPath)
   if ('error' in result) {
     addToast({ message: `Failed to read directory: ${result.error}`, type: 'error' })
-    return
+    return []
   }
 
   const entries = Array.isArray(result) ? result : []
@@ -182,15 +181,23 @@ async function loadDirectory(
     return a.name.localeCompare(b.name)
   })
 
-  const nodes: FileNode[] = sorted.map((entry) => ({
-    name: entry.name,
-    path: entry.path,
-    isDirectory: entry.isDirectory,
-    isFile: entry.isFile,
-    children: entry.isDirectory ? [] : undefined,
-    expanded: false,
-    selected: false,
-  }))
-
-  setFiles(nodes)
+  const nodes: FileNode[] = []
+  for (const entry of sorted) {
+    const isExpanded = entry.isDirectory && expandedPaths.has(entry.path)
+    const node: FileNode = {
+      name: entry.name,
+      path: entry.path,
+      isDirectory: entry.isDirectory,
+      isFile: entry.isFile,
+      expanded: isExpanded,
+      selected: entry.path === selectedPath,
+      children: isExpanded ? [] : undefined,
+    }
+    if (isExpanded) {
+      node.children = await refreshDirectory(entry.path, expandedPaths, selectedPath, addToast)
+    }
+    nodes.push(node)
+  }
+  return nodes
 }
+

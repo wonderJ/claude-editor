@@ -22,36 +22,36 @@ export function TerminalPanel(): JSX.Element {
     addTab,
     removeTab,
     setActiveTab,
-    addHistory,
   } = useTerminalStore()
 
-  const { addToast } = useFileStore()
+  const { addToast, rootPath } = useFileStore()
   const [showSettings, setShowSettings] = useState(false)
   const xtermContainerRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   const isCollapsed = terminalCollapsed || terminalHeight <= 40
+  const cwd = rootPath ?? ''
 
-  function resizeTerminal(id: string): void {
+  const resizeTerminal = useCallback((id: string): void => {
     const el = xtermContainerRefs.current.get(id)
     if (!el) return
-    const resizeFn = (el as unknown as Record<string, unknown>).resize as (() => { cols: number; rows: number }) | undefined
+    const resizeFn = (el as unknown as Record<string, unknown>).termResize as (() => { cols: number; rows: number }) | undefined
     const dims = resizeFn?.()
     if (dims) {
       void window.electronAPI?.terminalResize(id, dims.cols, dims.rows)
     }
-  }
+  }, [])
 
-  function focusTerminal(id: string): void {
+  const focusTerminal = useCallback((id: string): void => {
     const el = xtermContainerRefs.current.get(id)
     if (!el) return
-    const focusFn = (el as unknown as Record<string, unknown>).focus as (() => void) | undefined
+    const focusFn = (el as unknown as Record<string, unknown>).termFocus as (() => void) | undefined
     focusFn?.()
-  }
+  }, [])
 
-  function createTerminal(id: string): void {
+  const createTerminal = useCallback((id: string, terminalCwd = cwd): void => {
     void (async () => {
       try {
-        const result = await window.electronAPI?.terminalCreate(id, '')
+        const result = await window.electronAPI?.terminalCreate(id, terminalCwd)
         if (result && 'error' in result) {
           addToast({ message: 'Failed to create terminal: ' + result.error, type: 'error' })
           return
@@ -64,34 +64,97 @@ export function TerminalPanel(): JSX.Element {
         addToast({ message: 'Terminal creation error: ' + String(err), type: 'error' })
       }
     })()
-  }
+  }, [addToast, cwd, resizeTerminal, focusTerminal])
 
   // Create first terminal tab if none exist
   useEffect(() => {
     if (tabs.length === 0 && terminalVisible && !isCollapsed) {
-      const id = addTab()
-      createTerminal(id)
+      const id = addTab(cwd)
+      createTerminal(id, cwd)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabs.length, terminalVisible, isCollapsed, addTab])
+  }, [tabs.length, terminalVisible, isCollapsed, addTab, cwd])
 
-  function handleAddTab(): void {
-    const id = addTab()
-    createTerminal(id)
-  }
+  const handleAddTab = useCallback((): void => {
+    const id = addTab(cwd)
+    createTerminal(id, cwd)
+  }, [addTab, cwd, createTerminal])
 
-  function handleRemoveTab(id: string): void {
+  const handleRemoveTab = useCallback((id: string): void => {
     void window.electronAPI?.terminalKill(id)
     removeTab(id)
+  }, [removeTab])
+
+  function callActive(method: 'termClear' | 'termScrollToTop' | 'termScrollToBottom'): void {
+    if (!activeTabId) return
+    const el = xtermContainerRefs.current.get(activeTabId)
+    if (!el) return
+    const fn = (el as unknown as Record<string, (() => void) | undefined>)[method]
+    if (typeof fn === 'function') fn()
   }
 
-  function handleSelectTab(id: string): void {
+  useEffect(() => {
+    const onClear = () => { callActive('termClear') }
+    const onKill = () => {
+      const id = useTerminalStore.getState().activeTabId
+      if (id) {
+        const { removeTab } = useTerminalStore.getState()
+        void window.electronAPI?.terminalKill(id)
+        removeTab(id)
+      }
+    }
+    const onTop = () => { callActive('termScrollToTop') }
+    const onBottom = () => { callActive('termScrollToBottom') }
+    window.addEventListener('terminal:clear', onClear)
+    window.addEventListener('terminal:kill', onKill)
+    window.addEventListener('terminal:scrollTop', onTop)
+    window.addEventListener('terminal:scrollBottom', onBottom)
+    return () => {
+      window.removeEventListener('terminal:clear', onClear)
+      window.removeEventListener('terminal:kill', onKill)
+      window.removeEventListener('terminal:scrollTop', onTop)
+      window.removeEventListener('terminal:scrollBottom', onBottom)
+    }
+  }, [activeTabId])
+
+  // Focus/resize active terminal when requested from other components.
+  useEffect(() => {
+    const onFocus = () => {
+      if (!activeTabId) return
+      resizeTerminal(activeTabId)
+      focusTerminal(activeTabId)
+    }
+    window.addEventListener('terminal:focus', onFocus)
+    return () => { window.removeEventListener('terminal:focus', onFocus) }
+  }, [activeTabId, resizeTerminal, focusTerminal])
+
+  // Resize/focus active terminal when expanding from collapsed state.
+  const wasCollapsedRef = useRef(isCollapsed)
+  useEffect(() => {
+    if (wasCollapsedRef.current && !isCollapsed && activeTabId) {
+      resizeTerminal(activeTabId)
+      focusTerminal(activeTabId)
+    }
+    wasCollapsedRef.current = isCollapsed
+  }, [isCollapsed, activeTabId, resizeTerminal, focusTerminal])
+
+  // Resize/focus active terminal when showing the panel after it was hidden.
+  const wasVisibleRef = useRef(terminalVisible)
+  useEffect(() => {
+    if (!wasVisibleRef.current && terminalVisible && activeTabId) {
+      resizeTerminal(activeTabId)
+      focusTerminal(activeTabId)
+    }
+    wasVisibleRef.current = terminalVisible
+  }, [terminalVisible, activeTabId, resizeTerminal, focusTerminal])
+
+  const handleSelectTab = useCallback((id: string): void => {
     setActiveTab(id)
     setTimeout(() => {
       resizeTerminal(id)
       focusTerminal(id)
     }, 50)
-  }
+  }, [setActiveTab, resizeTerminal, focusTerminal])
 
   const handleTerminalData = useCallback((id: string, data: string) => {
     void window.electronAPI?.terminalWrite(id, data)
@@ -99,8 +162,8 @@ export function TerminalPanel(): JSX.Element {
 
   // Handle keyboard events - let shell handle Up/Down history natively
   // We only intercept Tab to allow shell completion, and Enter to track commands
-  const handleTerminalKey = useCallback((id: string, e: { key: string; domEvent: KeyboardEvent }) => {
-    const { key, domEvent } = e
+  const handleTerminalKey = useCallback((_id: string, e: { key: string; domEvent: KeyboardEvent }) => {
+    const { key } = e
 
     // Tab: pass through to shell for native completion
     if (key === '\t') {
@@ -113,12 +176,8 @@ export function TerminalPanel(): JSX.Element {
     }
   }, [])
 
-  if (!terminalVisible) {
-    return <div className="hidden" />
-  }
-
   return (
-    <div className="flex shrink-0 flex-col border-t border-[#4E5254] bg-[#1E1F22] transition-[height] duration-200 ease-out" style={{ height: isCollapsed ? 32 : terminalHeight }}>
+    <div className={['flex shrink-0 flex-col border-t border-[#4E5254] bg-[#1E1F22] transition-[height] duration-200 ease-out relative overflow-hidden', !terminalVisible ? 'hidden' : ''].join(' ')} style={{ height: isCollapsed ? 32 : terminalHeight }}>
       {/* Tab bar + controls */}
       <div className="flex h-8 shrink-0 items-center justify-between border-b border-[#4E5254] bg-[#2B2D30]">
         <TerminalTabBar
@@ -186,30 +245,31 @@ export function TerminalPanel(): JSX.Element {
       )}
 
       {/* Terminal instances */}
-      {!isCollapsed && (
-        <div className="relative flex-1 overflow-hidden">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              ref={(el) => {
-                if (el) {
-                  xtermContainerRefs.current.set(tab.id, el)
-                } else {
-                  xtermContainerRefs.current.delete(tab.id)
-                }
-              }}
-              className={tab.id === activeTabId ? 'relative z-10 h-full w-full' : 'invisible absolute inset-0 h-full w-full'}
-            >
-              <XTerm
-                id={tab.id}
-                settings={settings}
-                onData={handleTerminalData}
-                onKey={handleTerminalKey}
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      <div
+        className={isCollapsed ? 'absolute left-0 top-8 w-full opacity-0 pointer-events-none' : 'relative flex-1 overflow-hidden'}
+        style={isCollapsed ? { height: terminalHeight } : undefined}
+      >
+        {tabs.map((tab) => (
+          <div
+            key={tab.id}
+            ref={(el) => {
+              if (el) {
+                xtermContainerRefs.current.set(tab.id, el)
+              } else {
+                xtermContainerRefs.current.delete(tab.id)
+              }
+            }}
+            className={tab.id === activeTabId ? 'relative z-10 h-full w-full' : 'invisible absolute inset-0 h-full w-full'}
+          >
+            <XTerm
+              id={tab.id}
+              settings={settings}
+              onData={handleTerminalData}
+              onKey={handleTerminalKey}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

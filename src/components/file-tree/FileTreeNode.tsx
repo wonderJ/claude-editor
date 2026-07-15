@@ -4,6 +4,8 @@ import { useFileStore, type FileNode } from '../../stores/fileStore'
 import { useEditorStore } from '../../stores/editorStore'
 import { useHistoryStore } from '../../stores/historyStore'
 import { useGitStore } from '../../stores/gitStore'
+import { useLayoutStore } from '../../stores/layoutStore'
+import { useTerminalStore } from '../../stores/terminalStore'
 import { STATUS_COLORS } from '../../lib/gitStatus'
 import { FileIcon, FolderIcon } from './FileIcons'
 import { ContextMenu } from './ContextMenu'
@@ -174,6 +176,38 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
     void openInExplorer(node.path, addToast)
   }
 
+  const handleOpenInTerminal = async () => {
+    if (!window.electronAPI) {
+      addToast({ message: 'Electron API not available', type: 'error' })
+      return
+    }
+    const rel = rootPath && node.path.startsWith(rootPath)
+      ? node.path.slice(rootPath.length).replace(/^[\\/]/, '')
+      : node.path
+    useLayoutStore.getState().setTerminalCollapsed(false)
+    if (!useLayoutStore.getState().terminalVisible) {
+      useLayoutStore.getState().toggleTerminal()
+    }
+    const terminalStore = useTerminalStore.getState()
+    let activeId = terminalStore.activeTabId
+    if (!activeId) {
+      const cwd = rootPath || ''
+      activeId = terminalStore.addTab(cwd)
+      const result = await window.electronAPI.terminalCreate(activeId, cwd)
+      if (result && 'error' in result) {
+        addToast({ message: 'Failed to create terminal: ' + result.error, type: 'error' })
+        return
+      }
+    }
+    const result = await window.electronAPI.terminalWrite(activeId, rel)
+    if (result && 'error' in result) {
+      addToast({ message: 'Failed to send to terminal: ' + result.error, type: 'error' })
+      return
+    }
+    terminalStore.setActiveTab(activeId)
+    window.dispatchEvent(new CustomEvent('terminal:focus'))
+  }
+
   const handleShowHistory = () => {
     openHistory(node.path, node.name)
   }
@@ -194,6 +228,7 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
     { label: 'Delete', action: () => { setConfirmDelete(true) }, danger: true, shortcut: 'Del' },
     { separator: true, label: '', action: () => {} },
     { label: 'Open in Explorer', action: handleOpenInExplorer, shortcut: 'Ctrl+Shift+O' },
+    { label: '@ in Terminal', action: handleOpenInTerminal },
     { label: 'Show History', action: handleShowHistory },
   ]
 

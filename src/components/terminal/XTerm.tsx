@@ -103,6 +103,34 @@ export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element 
       onKeyRef.current?.(id, e)
     })
 
+    term.attachCustomKeyEventHandler((domEvent) => {
+      if (domEvent.type !== 'keydown') return true
+      // Copy on Ctrl+C when there is an active selection
+      if (domEvent.ctrlKey && (domEvent.key === 'c' || domEvent.key === 'C') && term.getSelection()) {
+        const selection = term.getSelection()
+        if (selection) {
+          void navigator.clipboard.writeText(selection)
+          term.clearSelection()
+        }
+        return false
+      }
+      // Paste on Ctrl+V / Ctrl+Shift+V: prefer Explorer file paths, fall back to plain text.
+      if (domEvent.ctrlKey && (domEvent.key === 'v' || domEvent.key === 'V')) {
+        void (async () => {
+          const filePaths = await window.electronAPI?.readClipboardFilePaths?.()
+          if (filePaths && filePaths.length > 0) {
+            const text = filePaths.map((p: string) => (/\s/.test(p) ? `"${p}"` : p)).join(' ')
+            onDataRef.current(id, text + ' ')
+          } else {
+            const text = await navigator.clipboard.readText()
+            if (text) onDataRef.current(id, text)
+          }
+        })()
+        return false
+      }
+      return true
+    })
+
     // Save selection on change, auto-copy to clipboard
     term.onSelectionChange(() => {
       const selection = term.getSelection()
@@ -189,12 +217,17 @@ export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element 
 
     const handleContextMenu = async (e: MouseEvent) => {
       e.preventDefault()
-      const term = termRef.current
-      if (!term) return
+      if (!termRef.current) return
       try {
+        const filePaths = await window.electronAPI?.readClipboardFilePaths?.()
+        if (filePaths && filePaths.length > 0) {
+          const text = filePaths.map((p: string) => (/\s/.test(p) ? `"${p}"` : p)).join(' ')
+          onDataRef.current(id, text + ' ')
+          return
+        }
         const text = await navigator.clipboard.readText()
         if (text) {
-          term.paste(text)
+          onDataRef.current(id, text)
         }
       } catch {
         // Ignore clipboard errors
@@ -223,7 +256,8 @@ export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element 
   }, [])
 
   // Drag & drop image files: write absolute path into the PTY so `claude` CLI can read it.
-  // Electron exposes the local absolute path via File.path, so no temp file is needed.
+  // Note: dropping files from Explorer only works when the app is not running as Administrator
+  // (Windows UIPI blocks lower-privilege Explorer → higher-privilege app).
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -237,12 +271,11 @@ export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element 
 
     const handleDrop = (e: DragEvent) => {
       e.preventDefault()
-      const files = e.dataTransfer?.files
-      if (!files || files.length === 0) return
+      const dt = e.dataTransfer
+      if (!dt?.files?.length) return
 
       const paths: string[] = []
-      for (const file of Array.from(files)) {
-        // Electron 32+ removed File.path; resolve the absolute path via webUtils (exposed in preload).
+      for (const file of Array.from(dt.files)) {
         const filePath = window.electronAPI?.getPathForFile?.(file) ?? ''
         if (filePath && IMAGE_EXT.test(filePath)) {
           paths.push(filePath)
@@ -250,9 +283,7 @@ export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element 
       }
       if (paths.length === 0) return
 
-      // Quote paths containing spaces so the CLI parses them as single tokens.
       const text = paths.map(p => (/\s/.test(p) ? `"${p}"` : p)).join(' ')
-      // Write through the PTY (not term.paste) so it lands at the CLI input prompt.
       onDataRef.current(id, text + ' ')
       termRef.current?.focus()
     }
@@ -269,13 +300,22 @@ export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    ;(el as unknown as Record<string, unknown>).focus = () => {
+    ;(el as unknown as Record<string, unknown>).termFocus = () => {
       termRef.current?.focus()
     }
-    ;(el as unknown as Record<string, unknown>).resize = () => {
+    ;(el as unknown as Record<string, unknown>).termResize = () => {
       manualFit()
       const dims = fitAddonRef.current?.proposeDimensions()
       return dims ?? { cols: 80, rows: 24 }
+    }
+    ;(el as unknown as Record<string, unknown>).termClear = () => {
+      termRef.current?.clear()
+    }
+    ;(el as unknown as Record<string, unknown>).termScrollToTop = () => {
+      termRef.current?.scrollToTop()
+    }
+    ;(el as unknown as Record<string, unknown>).termScrollToBottom = () => {
+      termRef.current?.scrollToBottom()
     }
   }, [manualFit])
 

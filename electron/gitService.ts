@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import path from 'node:path'
 
 // ── Shared types (mirrored in electron/preload.ts) ──────────────────────────
 
@@ -47,6 +48,11 @@ export interface GitCommit {
 }
 
 export type DiffMode = 'working' | 'staged'
+
+export interface GitRemote {
+  name: string
+  url: string
+}
 
 // ── Git runner ──────────────────────────────────────────────────────────────
 
@@ -112,7 +118,8 @@ function parseStatus(raw: string): GitStatus {
       // e.g. "main...origin/main [ahead 1, behind 2]"
       const trackMatch = /^(.+?)(?:\.\.\.(\S+))?(?:\s+\[(.+)\])?$/.exec(header)
       if (trackMatch) {
-        status.branch = trackMatch[1] === 'HEAD (no branch)' ? null : trackMatch[1]
+        const rawBranch = trackMatch[1]
+        status.branch = rawBranch && rawBranch !== 'HEAD (no branch)' ? rawBranch : null
         if (trackMatch[2]) status.tracking = trackMatch[2]
         const meta = trackMatch[3]
         if (meta) {
@@ -124,15 +131,17 @@ function parseStatus(raw: string): GitStatus {
       }
       continue
     }
-    const indexCode = line[0]
-    const worktreeCode = line[1]
+    const indexCode = line[0] ?? ' '
+    const worktreeCode = line[1] ?? ' '
     let filePath = line.slice(3)
     let originalPath: string | undefined
     // Renamed entries: "R  old -> new"
     if (filePath.includes(' -> ')) {
-      const [from, to] = filePath.split(' -> ')
-      originalPath = from
-      filePath = to
+      const arrowParts = filePath.split(' -> ')
+      if (arrowParts.length === 2) {
+        originalPath = arrowParts[0]
+        filePath = arrowParts[1] ?? filePath
+      }
     }
     status.files.push({
       path: filePath,
@@ -172,13 +181,14 @@ function parseLog(raw: string): GitCommit[] {
     const parts = line.split('\x00')
     if (parts.length < 8) continue
     const [hash, shortHash, subject, authorName, authorEmail, authorDate, refs, parents] = parts
+    if (!hash) continue
     commits.push({
       hash,
-      shortHash,
-      subject,
-      authorName,
-      authorEmail,
-      authorDate: Number(authorDate) * 1000,
+      shortHash: shortHash ?? '',
+      subject: subject ?? '',
+      authorName: authorName ?? '',
+      authorEmail: authorEmail ?? '',
+      authorDate: Number(authorDate ?? 0) * 1000,
       refs: refs ? refs.split(',').map((r) => r.trim()).filter(Boolean) : [],
       parents: parents ? parents.split(' ').filter(Boolean) : [],
     })
@@ -208,6 +218,26 @@ export function registerGitHandlers(): void {
       return { isRepo: res.code === 0 && res.stdout.trim() === 'true' }
     } catch {
       return { isRepo: false }
+    }
+  })
+
+  ipcMain.handle('git:init', async (_e, repoPath: string) => {
+    try {
+      await runGit(repoPath, ['init'])
+      return { success: true }
+    } catch (err) {
+      return { error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('git:clone', async (_e, url: string, targetPath: string) => {
+    try {
+      const parent = path.dirname(targetPath)
+      await fs.promises.mkdir(parent, { recursive: true })
+      await runGit(parent, ['clone', url, path.basename(targetPath)])
+      return { success: true }
+    } catch (err) {
+      return { error: (err as Error).message }
     }
   })
 
@@ -371,6 +401,42 @@ export function registerGitHandlers(): void {
         'log', `--pretty=format:${fmt}`, `--max-count=${String(maxCount ?? 100)}`,
       ])
       return { commits: parseLog(raw) }
+    } catch (err) {
+      return { error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('git:remotes', async (_e, repoPath: string) => {
+    try {
+      const raw = await runGit(repoPath, ['remote', '-v'])
+      const remotes: GitRemote[] = []
+      const seen = new Set<string>()
+      for (const line of raw.split('\n')) {
+        const parts = line.trim().split(/\s+/)
+        if (parts.length >= 2 && !seen.has(parts[0]!)) {
+          remotes.push({ name: parts[0]!, url: parts[1]! })
+          seen.add(parts[0]!)
+        }
+      }
+      return { remotes }
+    } catch (err) {
+      return { error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('git:remoteAdd', async (_e, repoPath: string, name: string, url: string) => {
+    try {
+      await runGit(repoPath, ['remote', 'add', name, url])
+      return { success: true }
+    } catch (err) {
+      return { error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('git:remoteRemove', async (_e, repoPath: string, name: string) => {
+    try {
+      await runGit(repoPath, ['remote', 'remove', name])
+      return { success: true }
     } catch (err) {
       return { error: (err as Error).message }
     }

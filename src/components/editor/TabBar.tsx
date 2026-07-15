@@ -1,9 +1,19 @@
 import { X } from 'lucide-react'
+import { useState } from 'react'
 import type { JSX } from 'react'
 import { useEditorStore } from '../../stores/editorStore'
+import { ContextMenu } from '../file-tree/ContextMenu'
 
 export function TabBar(): JSX.Element {
-  const { tabs, activeTabPath, switchTab, closeTab } = useEditorStore()
+  const {
+    tabs,
+    activeTabPath,
+    switchTab,
+    closeTab,
+    closeAllTabs,
+    closeOtherTabs,
+  } = useEditorStore()
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null)
 
   return (
     <div className="flex max-h-32 shrink-0 flex-wrap items-center gap-0.5 overflow-y-auto border-b border-[#4E5254] bg-[#2B2D30] px-1 py-0.5">
@@ -21,6 +31,11 @@ export function TabBar(): JSX.Element {
             ].join(' ')}
             onClick={() => {
               switchTab(tab.path)
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setContextMenu({ x: e.clientX, y: e.clientY, path: tab.path })
             }}
           >
             <span className="truncate max-w-[120px]">{tab.name}</span>
@@ -43,6 +58,41 @@ export function TabBar(): JSX.Element {
           </div>
         )
       })}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => { setContextMenu(null) }}
+          items={[
+            {
+              label: 'Close',
+              action: () => { closeTab(contextMenu.path) },
+              shortcut: 'Ctrl+W',
+            },
+            {
+              label: 'Close Others',
+              action: () => { closeOtherTabs(contextMenu.path) },
+            },
+            {
+              label: 'Close All',
+              action: () => { closeAllTabs() },
+            },
+            { separator: true, label: '', action: () => {} },
+            {
+              label: 'Split Right',
+              disabled: true,
+              action: () => {},
+            },
+            { separator: true, label: '', action: () => {} },
+            {
+              label: 'Copy Path',
+              action: () => {
+                void navigator.clipboard.writeText(contextMenu.path)
+              },
+            },
+          ]}
+        />
+      )}
     </div>
   )
 }

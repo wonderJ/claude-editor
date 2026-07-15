@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, clipboard } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
@@ -91,6 +91,30 @@ function createWindow(): void {
     mainWindow?.close()
   })
 }
+
+ipcMain.handle('clipboard:readFilePaths', () => {
+  try {
+    const fileNameW = clipboard.readBuffer('FileNameW')
+    if (fileNameW.length > 0) {
+      return fileNameW.toString('ucs2').replace(/\0+$/, '').split('\0').filter(Boolean)
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const hdrop = clipboard.readBuffer('CF_HDROP')
+    if (hdrop.length > 0) {
+      const pFiles = hdrop.readUInt32LE(0)
+      const fWide = hdrop.readUInt32LE(12) !== 0
+      const raw = hdrop.slice(pFiles)
+      const text = fWide ? raw.toString('ucs2') : raw.toString('ascii')
+      return text.replace(/\0+$/, '').split('\0').filter(Boolean)
+    }
+  } catch {
+    // ignore
+  }
+  return []
+})
 
 // IPC handlers - app info
 ipcMain.handle('app:platform', () => process.platform)
@@ -316,6 +340,21 @@ ipcMain.handle('history:rollback', async (_event, filePath: string, versionId: s
   }
 })
 
+const LOG_FILE = path.join(app.getPath('userData'), 'claude-editor-debug.log')
+
+function logToFile(...args: unknown[]): void {
+  try {
+    const line = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') + '\n'
+    fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${line}`)
+  } catch {
+    // ignore logging errors
+  }
+}
+
+process.on('uncaughtException', (err) => {
+  logToFile('UNCAUGHT EXCEPTION', err)
+})
+
 // Terminal IPC handlers using node-pty
 const terminals = new Map<string, IPty>()
 const terminalSizes = new Map<string, { cols: number; rows: number }>()
@@ -346,22 +385,20 @@ function getDefaultShell(): string {
 ipcMain.handle('terminal:create', (_event, id: string, cwd: string) => {
   try {
     const shell = getDefaultShell()
-    console.log('terminal:create', id, shell, cwd)
+    logToFile('terminal:create start', id, shell, cwd)
     const pty = spawn(shell, [], {
       name: 'xterm-color',
       cwd: cwd || process.cwd(),
       env: process.env,
       cols: 80,
       rows: 24,
-      useConpty: false,
+      useConpty: true,
     } as import('node-pty').IPtyForkOptions)
 
     terminals.set(id, pty)
 
     pty.onData((data) => {
-      console.log('pty raw:', JSON.stringify(data))
       const colored = colorizePrompt(data)
-      console.log('pty colored:', JSON.stringify(colored))
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('terminal:data', id, colored)
       }
@@ -374,9 +411,10 @@ ipcMain.handle('terminal:create', (_event, id: string, cwd: string) => {
       }
     })
 
+    logToFile('terminal:create end', id)
     return { success: true }
   } catch (err) {
-    console.error('terminal:create error:', err)
+    logToFile('terminal:create error', err)
     return { error: (err as Error).message }
   }
 })
@@ -385,11 +423,11 @@ ipcMain.handle('terminal:write', (_event, id: string, data: string) => {
   const pty = terminals.get(id)
   if (!pty) return { error: 'Terminal not found' }
   try {
-    console.log('terminal:write:', id, JSON.stringify(data))
+    logToFile('terminal:write', id, JSON.stringify(data))
     pty.write(data)
     return { success: true }
   } catch (err) {
-    console.error('terminal:write error:', err)
+    logToFile('terminal:write error', err)
     return { error: (err as Error).message }
   }
 })
@@ -402,10 +440,13 @@ ipcMain.handle('terminal:resize', (_event, id: string, cols: number, rows: numbe
     if (prev && prev.cols === cols && prev.rows === rows) {
       return { success: true }
     }
+    logToFile('terminal:resize start', id, cols, rows)
     terminalSizes.set(id, { cols, rows })
     pty.resize(cols, rows)
+    logToFile('terminal:resize end', id, cols, rows)
     return { success: true }
   } catch (err) {
+    logToFile('terminal:resize error', err)
     return { error: (err as Error).message }
   }
 })
@@ -414,10 +455,12 @@ ipcMain.handle('terminal:kill', (_event, id: string) => {
   const pty = terminals.get(id)
   if (!pty) return { success: true }
   try {
+    logToFile('terminal:kill', id)
     pty.kill()
     terminals.delete(id)
     return { success: true }
   } catch (err) {
+    logToFile('terminal:kill error', err)
     return { error: (err as Error).message }
   }
 })

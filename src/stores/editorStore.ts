@@ -27,11 +27,14 @@ interface EditorStore {
   openTab: (path: string, name: string, content: string) => void
   openDiffTab: (filePath: string, name: string, diff: EditorTabDiff) => void
   closeTab: (path: string) => void
+  closeAllTabs: () => void
+  closeOtherTabs: (path: string) => void
   switchTab: (path: string) => void
   updateContent: (path: string, content: string) => void
   markSaved: (path: string) => void
   setLoading: (loading: boolean) => void
   getActiveTab: () => EditorTab | undefined
+  showWelcome: () => void
 }
 
 function getLanguageFromPath(path: string): string {
@@ -130,6 +133,16 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set({ tabs: nextTabs, activeTabPath: nextActive })
   },
 
+  closeAllTabs: () => {
+    set({ tabs: [], activeTabPath: null })
+  },
+
+  closeOtherTabs: (path) => {
+    const { tabs } = get()
+    const keep = tabs.find((t) => t.path === path)
+    set({ tabs: keep ? [keep] : [], activeTabPath: path })
+  },
+
   switchTab: (path) => {
     set({ activeTabPath: path })
   },
@@ -159,6 +172,10 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   getActiveTab: () => {
     const { tabs, activeTabPath } = get()
     return tabs.find((t) => t.path === activeTabPath)
+  },
+
+  showWelcome: () => {
+    set({ activeTabPath: null })
   },
 }))
 

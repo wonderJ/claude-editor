@@ -40,6 +40,12 @@ interface GitState {
   push: () => Promise<void>
   pull: () => Promise<void>
   fetch: () => Promise<void>
+  updateProject: () => Promise<void>
+  initRepo: (repoPath: string) => Promise<void>
+  cloneRepo: (url: string, targetPath: string) => Promise<boolean>
+  listRemotes: () => Promise<{ name: string; url: string }[]>
+  addRemote: (name: string, url: string) => Promise<void>
+  removeRemote: (name: string) => Promise<void>
 
   checkoutBranch: (name: string) => Promise<void>
   createBranch: (name: string, startPoint?: string) => Promise<void>
@@ -178,6 +184,54 @@ export const useGitStore = create<GitState>((set, get) => ({
     if ('error' in res) { toastError(res.error); return }
     await get().refreshStatus()
     useFileStore.getState().addToast({ message: 'Fetched', type: 'success' })
+  },
+
+  updateProject: async () => {
+    const { repoPath } = get()
+    if (!repoPath || !window.electronAPI) return
+    await get().fetch()
+    await get().pull()
+  },
+
+  initRepo: async (repoPath) => {
+    if (!window.electronAPI) return
+    const res = await window.electronAPI.gitInit(repoPath)
+    if ('error' in res) { toastError(res.error); return }
+    set({ isRepo: true })
+    await get().refreshAll()
+    useFileStore.getState().addToast({ message: 'Git repository initialized', type: 'success' })
+  },
+
+  cloneRepo: async (url, targetPath) => {
+    if (!window.electronAPI) return false
+    const res = await window.electronAPI.gitClone(url, targetPath)
+    if ('error' in res) { toastError(res.error); return false }
+    useFileStore.getState().addToast({ message: 'Repository cloned', type: 'success' })
+    return true
+  },
+
+  listRemotes: async () => {
+    const { repoPath } = get()
+    if (!repoPath || !window.electronAPI) return []
+    const res = await window.electronAPI.gitRemotes(repoPath)
+    if ('error' in res) { toastError(res.error); return [] }
+    return res.remotes
+  },
+
+  addRemote: async (name, url) => {
+    const { repoPath } = get()
+    if (!repoPath || !window.electronAPI) return
+    const res = await window.electronAPI.gitRemoteAdd(repoPath, name, url)
+    if ('error' in res) { toastError(res.error); return }
+    useFileStore.getState().addToast({ message: `Remote ${name} added`, type: 'success' })
+  },
+
+  removeRemote: async (name) => {
+    const { repoPath } = get()
+    if (!repoPath || !window.electronAPI) return
+    const res = await window.electronAPI.gitRemoteRemove(repoPath, name)
+    if ('error' in res) { toastError(res.error); return }
+    useFileStore.getState().addToast({ message: `Remote ${name} removed`, type: 'success' })
   },
 
   checkoutBranch: async (name) => {
