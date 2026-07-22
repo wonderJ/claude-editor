@@ -304,21 +304,30 @@ export function XTerm({ id, settings, onData, onKey }: XTermProps): JSX.Element 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    ;(el as unknown as Record<string, unknown>).termFocus = () => {
-      termRef.current?.focus()
+    // TerminalPanel stores the wrapper div that contains this XTerm container,
+    // so attach the imperative methods to the wrapper so they are discoverable.
+    const target = el.parentElement ?? el
+    ;(target as unknown as Record<string, unknown>).termFocus = () => {
+      const term = termRef.current
+      if (!term) return
+      term.focus()
+      const textarea = el.querySelector('textarea.xterm-helper-textarea') as HTMLTextAreaElement | null
+      if (textarea) {
+        textarea.focus({ preventScroll: true })
+      }
     }
-    ;(el as unknown as Record<string, unknown>).termResize = () => {
+    ;(target as unknown as Record<string, unknown>).termResize = () => {
       manualFit()
       const dims = fitAddonRef.current?.proposeDimensions()
       return dims ?? { cols: 80, rows: 24 }
     }
-    ;(el as unknown as Record<string, unknown>).termClear = () => {
+    ;(target as unknown as Record<string, unknown>).termClear = () => {
       termRef.current?.clear()
     }
-    ;(el as unknown as Record<string, unknown>).termScrollToTop = () => {
+    ;(target as unknown as Record<string, unknown>).termScrollToTop = () => {
       termRef.current?.scrollToTop()
     }
-    ;(el as unknown as Record<string, unknown>).termScrollToBottom = () => {
+    ;(target as unknown as Record<string, unknown>).termScrollToBottom = () => {
       termRef.current?.scrollToBottom()
     }
   }, [manualFit])

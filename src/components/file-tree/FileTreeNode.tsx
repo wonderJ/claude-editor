@@ -199,13 +199,24 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
         return
       }
     }
+    terminalStore.setActiveTab(activeId)
+    // Dispatch focus first so TerminalPanel starts expanding if needed.
+    window.dispatchEvent(new CustomEvent('terminal:focus'))
     const result = await window.electronAPI.terminalWrite(activeId, rel)
     if (result && 'error' in result) {
       addToast({ message: 'Failed to send to terminal: ' + result.error, type: 'error' })
       return
     }
-    terminalStore.setActiveTab(activeId)
-    window.dispatchEvent(new CustomEvent('terminal:focus'))
+    // Focus again after the context menu has closed and React has flushed
+    // layout changes, ensuring the xterm textarea receives keyboard input.
+    setTimeout(() => {
+      const focusFn = (window as unknown as Record<string, (id: string) => void>).__focusTerminal
+      if (typeof focusFn === 'function') {
+        focusFn(activeId)
+      } else {
+        window.dispatchEvent(new CustomEvent('terminal:focus'))
+      }
+    }, 300)
   }
 
   const handleShowHistory = () => {

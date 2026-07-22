@@ -42,11 +42,31 @@ export function TerminalPanel(): JSX.Element {
   }, [])
 
   const focusTerminal = useCallback((id: string): void => {
-    const el = xtermContainerRefs.current.get(id)
-    if (!el) return
-    const focusFn = (el as unknown as Record<string, unknown>).termFocus as (() => void) | undefined
-    focusFn?.()
+    const tryFocus = (attempts = 0): void => {
+      const el = xtermContainerRefs.current.get(id)
+      if (!el) return
+      const focusFn = (el as unknown as Record<string, unknown>).termFocus as (() => void) | undefined
+      if (typeof focusFn === 'function') {
+        focusFn()
+        return
+      }
+      if (attempts < 20) {
+        setTimeout(() => { tryFocus(attempts + 1) }, 30)
+      }
+    }
+    tryFocus()
   }, [])
+
+  // Expose imperative focus method for context-menu actions that need to
+  // focus a specific terminal immediately without waiting for React state.
+  useEffect(() => {
+    ;(window as unknown as Record<string, (id: string) => void>).__focusTerminal = (id: string) => {
+      focusTerminal(id)
+    }
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__focusTerminal
+    }
+  }, [focusTerminal])
 
   const createTerminal = useCallback((id: string, terminalCwd = cwd): void => {
     void (async () => {
@@ -121,14 +141,12 @@ export function TerminalPanel(): JSX.Element {
   useEffect(() => {
     const onFocus = () => {
       if (!activeTabId) return
-      // Defer until React has finished expanding/showing the panel and the
-      // xterm container has been mounted/sized.
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          resizeTerminal(activeTabId)
-          focusTerminal(activeTabId)
-        }, 50)
-      })
+      // Wait for any expand/show animation and React layout flush before
+      // moving browser focus into the xterm textarea.
+      window.setTimeout(() => {
+        resizeTerminal(activeTabId)
+        focusTerminal(activeTabId)
+      }, 220)
     }
     window.addEventListener('terminal:focus', onFocus)
     return () => { window.removeEventListener('terminal:focus', onFocus) }
