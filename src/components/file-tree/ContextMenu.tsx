@@ -48,11 +48,23 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps): JSX.Ele
         onClose()
       }
     }
+    const handleContextMenu = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    const handleCloseAll = () => {
+      onClose()
+    }
     document.addEventListener('click', handleClick)
     document.addEventListener('keydown', handleEsc)
+    document.addEventListener('contextmenu', handleContextMenu)
+    window.addEventListener('filetree:closeContextMenu', handleCloseAll)
     return () => {
       document.removeEventListener('click', handleClick)
       document.removeEventListener('keydown', handleEsc)
+      document.removeEventListener('contextmenu', handleContextMenu)
+      window.removeEventListener('filetree:closeContextMenu', handleCloseAll)
     }
   }, [onClose])
 

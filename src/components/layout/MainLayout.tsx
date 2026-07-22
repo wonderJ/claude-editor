@@ -101,7 +101,7 @@ export function MainLayout(): JSX.Element {
   const { rootPath, files, selectedPath, addToast, setRootPath, refresh } = useFileStore()
   const { addTab, activeTabId } = useTerminalStore()
   const { closeTab, closeAllTabs, getActiveTab, markSaved, showWelcome } = useEditorStore()
-  const { addProject, projects, clearProjects } = useRecentProjectsStore()
+  const { addProject, projects, clearProjects, loadProjects } = useRecentProjectsStore()
   const gitMenuActions = useGitMenuActions()
 
   // Dialog / overlay state
@@ -238,6 +238,10 @@ export function MainLayout(): JSX.Element {
     },
     [terminalHeight, setTerminalHeight, setTerminalCollapsed]
   )
+
+  useEffect(() => {
+    void loadProjects()
+  }, [loadProjects])
 
   const dispatch = useCallback((type: string) => {
     window.dispatchEvent(new CustomEvent(type))
@@ -647,6 +651,15 @@ export function MainLayout(): JSX.Element {
       // Edit
       if (ctrl && key === 'z') { e.preventDefault(); dispatch('editor:undo'); return }
       if ((ctrl && shift && key === 'z') || (ctrl && key === 'y')) { e.preventDefault(); dispatch('editor:redo'); return }
+
+      // Skip global clipboard interception when Monaco editor has focus so it can
+      // use its native copy/cut/paste implementation.
+      const active = document.activeElement
+      const isMonacoFocused = active instanceof HTMLElement && active.closest('.monaco-editor') !== null
+      if (isMonacoFocused && (ctrl && (key === 'c' || key === 'x' || key === 'v'))) {
+        return
+      }
+
       if (ctrl && key === 'x') { e.preventDefault(); document.execCommand('cut'); return }
       if (ctrl && key === 'c') { e.preventDefault(); document.execCommand('copy'); return }
       if (ctrl && key === 'v') { e.preventDefault(); document.execCommand('paste'); return }

@@ -9,9 +9,12 @@ import { registerGitHandlers } from './gitService'
 const require = createRequire(import.meta.url)
 const { spawn } = require('node-pty') as typeof import('node-pty')
 
-const __dirname = import.meta.dirname
-
 let mainWindow: BrowserWindow | null = null
+
+function getAppRoot(): string {
+  // app.getAppPath() returns the app.asar file in packaged builds; in dev it is the project root.
+  return app.getAppPath()
+}
 
 // Single instance lock
 const gotTheLock = app.requestSingleInstanceLock()
@@ -33,31 +36,47 @@ function createWindow(): void {
   // Remove default menu to prevent shortcut conflicts (e.g., Ctrl+C in terminal)
   Menu.setApplicationMenu(null)
 
+  const appRoot = getAppRoot()
+  const preloadPath = path.join(appRoot, 'dist-electron', 'preload.cjs')
+  const indexPath = path.join(appRoot, 'dist', 'index.html')
+
+  logToFile('createWindow appRoot', appRoot)
+  logToFile('createWindow preloadPath', preloadPath)
+  logToFile('createWindow indexPath', indexPath)
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1024,
     minHeight: 768,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
-    titleBarStyle: 'hidden',
     frame: false,
-    show: false,
+    show: true,
+    center: true,
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
     void mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
     mainWindow.webContents.openDevTools()
   } else {
-    void mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    logToFile('createWindow loading file', indexPath)
+    void mainWindow.loadFile(indexPath).catch((err) => {
+      logToFile('createWindow loadFile error', err)
+    })
   }
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow?.show()
+    logToFile('createWindow ready-to-show')
+    mainWindow?.focus()
+  })
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    logToFile('did-fail-load', errorCode, errorDescription)
   })
 
   mainWindow.on('closed', () => {
@@ -341,6 +360,37 @@ ipcMain.handle('history:rollback', async (_event, filePath: string, versionId: s
 })
 
 const LOG_FILE = path.join(app.getPath('userData'), 'claude-editor-debug.log')
+const RECENT_PROJECTS_FILE = path.join(app.getPath('userData'), 'recent-projects.json')
+
+async function readRecentProjects(): Promise<string[]> {
+  try {
+    const raw = await fs.promises.readFile(RECENT_PROJECTS_FILE, 'utf-8')
+    const parsed = JSON.parse(raw) as unknown
+    if (Array.isArray(parsed)) {
+      return parsed.filter((p): p is string => typeof p === 'string')
+    }
+  } catch {
+    // File may not exist or be corrupted
+  }
+  return []
+}
+
+async function writeRecentProjects(projects: string[]): Promise<void> {
+  try {
+    await fs.promises.writeFile(RECENT_PROJECTS_FILE, JSON.stringify(projects), 'utf-8')
+  } catch {
+    // ignore write errors
+  }
+}
+
+ipcMain.handle('recent:load', async () => {
+  return { projects: await readRecentProjects() }
+})
+
+ipcMain.handle('recent:save', async (_event, projects: string[]) => {
+  await writeRecentProjects(projects)
+  return { success: true }
+})
 
 function logToFile(...args: unknown[]): void {
   try {

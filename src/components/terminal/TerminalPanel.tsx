@@ -121,8 +121,14 @@ export function TerminalPanel(): JSX.Element {
   useEffect(() => {
     const onFocus = () => {
       if (!activeTabId) return
-      resizeTerminal(activeTabId)
-      focusTerminal(activeTabId)
+      // Defer until React has finished expanding/showing the panel and the
+      // xterm container has been mounted/sized.
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          resizeTerminal(activeTabId)
+          focusTerminal(activeTabId)
+        }, 50)
+      })
     }
     window.addEventListener('terminal:focus', onFocus)
     return () => { window.removeEventListener('terminal:focus', onFocus) }

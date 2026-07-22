@@ -22,6 +22,9 @@ export interface ElectronAPI {
   historyList: (filePath: string) => Promise<{ versions: HistoryVersion[] } | { error: string }>
   historyRead: (filePath: string, versionId: string) => Promise<{ content: string } | { error: string }>
   historyRollback: (filePath: string, versionId: string) => Promise<{ content: string } | { error: string }>
+  // Recent projects
+  recentLoad: () => Promise<{ projects: string[] }>
+  recentSave: (projects: string[]) => Promise<{ success: boolean }>
   // Git
   gitIsRepo: (repoPath: string) => Promise<{ isRepo: boolean }>
   gitInit: (repoPath: string) => Promise<{ success: boolean } | { error: string }>
@@ -142,6 +145,8 @@ const api: ElectronAPI = {
   historyList: (filePath) => ipcRenderer.invoke('history:list', filePath),
   historyRead: (filePath, versionId) => ipcRenderer.invoke('history:read', filePath, versionId),
   historyRollback: (filePath, versionId) => ipcRenderer.invoke('history:rollback', filePath, versionId),
+  recentLoad: () => ipcRenderer.invoke('recent:load'),
+  recentSave: (projects) => ipcRenderer.invoke('recent:save', projects),
   gitIsRepo: (repoPath) => ipcRenderer.invoke('git:isRepo', repoPath),
   gitInit: (repoPath) => ipcRenderer.invoke('git:init', repoPath),
   gitClone: (url, targetPath) => ipcRenderer.invoke('git:clone', url, targetPath),

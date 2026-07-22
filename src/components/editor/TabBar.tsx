@@ -35,6 +35,7 @@ export function TabBar(): JSX.Element {
             onContextMenu={(e) => {
               e.preventDefault()
               e.stopPropagation()
+              window.dispatchEvent(new CustomEvent('filetree:closeContextMenu'))
               setContextMenu({ x: e.clientX, y: e.clientY, path: tab.path })
             }}
           >

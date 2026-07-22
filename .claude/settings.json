@@ -1,0 +1,7 @@
+{
+  "env": {
+    "ELECTRON_CACHE": "D:/cache/electron",
+    "ELECTRON_BUILDER_CACHE": "D:/cache/electron-builder",
+    "ELECTRON_MIRROR": "https://npmmirror.com/mirrors/electron/"
+  }
+}

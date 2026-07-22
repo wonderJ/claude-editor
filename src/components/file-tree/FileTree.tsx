@@ -6,6 +6,8 @@ import { useHistoryStore } from '../../stores/historyStore'
 import { FileTreeNode } from './FileTreeNode'
 import { HistoryDialog } from './HistoryDialog'
 import { ToastContainer } from './ToastContainer'
+import { ContextMenu } from './ContextMenu'
+import { PromptDialog } from '../common/PromptDialog'
 import {
   copyReference,
   findNode,
@@ -31,6 +33,34 @@ export function FileTree(): JSX.Element {
   } = useFileStore()
   const { openPath, openName, close: closeHistory } = useHistoryStore()
   const [isDragOver, setIsDragOver] = useState(false)
+
+  const [rootContextMenu, setRootContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [newFileOpen, setNewFileOpen] = useState(false)
+  const [newFolderOpen, setNewFolderOpen] = useState(false)
+
+  const doCreateFile = async (name: string) => {
+    if (!name || !rootPath || !window.electronAPI) return
+    const newPath = await generateUniquePath(rootPath, name)
+    const result = await window.electronAPI.createFile(newPath)
+    if ('error' in result) {
+      addToast({ message: result.error, type: 'error' })
+    } else {
+      addToast({ message: 'File created', type: 'success' })
+      refresh()
+    }
+  }
+
+  const doCreateFolder = async (name: string) => {
+    if (!name || !rootPath || !window.electronAPI) return
+    const newPath = await generateUniquePath(rootPath, name)
+    const result = await window.electronAPI.createDir(newPath)
+    if ('error' in result) {
+      addToast({ message: result.error, type: 'error' })
+    } else {
+      addToast({ message: 'Folder created', type: 'success' })
+      refresh()
+    }
+  }
 
   const handleOpenFolder = () => {
     if (!window.electronAPI) return
@@ -181,6 +211,16 @@ export function FileTree(): JSX.Element {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onContextMenu={(e) => {
+          if (!rootPath) return
+          // Only show root menu when right-clicking empty space (not a node row)
+          const target = e.target as HTMLElement
+          if (target.closest('[data-file-tree-node]')) return
+          e.preventDefault()
+          e.stopPropagation()
+          window.dispatchEvent(new CustomEvent('filetree:closeContextMenu'))
+          setRootContextMenu({ x: e.clientX, y: e.clientY })
+        }}
       >
         {!rootPath ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-[#8C8C8C]">
@@ -211,15 +251,76 @@ export function FileTree(): JSX.Element {
         )}
       </div>
 
-      {/* Root path indicator */}
+      {/* Root path indicator - also acts as a root-level context target */}
       {rootPath && (
-        <div className="shrink-0 truncate border-t border-[#4E5254] px-2 py-1 text-[10px] text-[#5C5C5C]">
+        <div
+          className="shrink-0 cursor-context-menu truncate border-t border-[#4E5254] px-2 py-1 text-[10px] text-[#5C5C5C] hover:bg-[#3C3F41]"
+          title="Root folder"
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            window.dispatchEvent(new CustomEvent('filetree:closeContextMenu'))
+            setRootContextMenu({ x: e.clientX, y: e.clientY })
+          }}
+        >
           {rootPath}
         </div>
       )}
 
       {openPath && openName && (
         <HistoryDialog path={openPath} name={openName} onClose={closeHistory} />
+      )}
+
+      {rootContextMenu && (
+        <ContextMenu
+          x={rootContextMenu.x}
+          y={rootContextMenu.y}
+          onClose={() => { setRootContextMenu(null) }}
+          items={[
+            { label: 'New File', action: () => { setNewFileOpen(true) } },
+            { label: 'New Folder', action: () => { setNewFolderOpen(true) } },
+            { separator: true, label: '', action: () => {} },
+            { label: 'Paste', action: () => {
+              if (!clipboard || !rootPath) return
+              void pasteInto(rootPath, clipboard.path, clipboard.mode, addToast).then((ok) => {
+                if (ok) {
+                  if (clipboard.mode === 'cut') clearClipboard()
+                  refresh()
+                }
+              })
+            }, disabled: !clipboard },
+            { separator: true, label: '', action: () => {} },
+            { label: 'Refresh', action: refresh },
+          ]}
+        />
+      )}
+
+      {newFileOpen && (
+        <PromptDialog
+          title="New File"
+          defaultValue="new-file.txt"
+          confirmText="Create"
+          cancelText="Cancel"
+          onConfirm={(value) => {
+            setNewFileOpen(false)
+            void doCreateFile(value)
+          }}
+          onCancel={() => { setNewFileOpen(false) }}
+        />
+      )}
+
+      {newFolderOpen && (
+        <PromptDialog
+          title="New Folder"
+          defaultValue="new-folder"
+          confirmText="Create"
+          cancelText="Cancel"
+          onConfirm={(value) => {
+            setNewFolderOpen(false)
+            void doCreateFolder(value)
+          }}
+          onCancel={() => { setNewFolderOpen(false) }}
+        />
       )}
     </div>
   )

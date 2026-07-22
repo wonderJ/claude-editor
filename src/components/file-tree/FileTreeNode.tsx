@@ -264,32 +264,40 @@ export function FileTreeNode({ node, depth }: FileTreeNodeProps): JSX.Element {
     <div>
       <div
         className={[
-          'flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-sm',
-          isSelected ? 'bg-[#4E5254] text-[#DFE1E5]' : 'text-[#A9B7C6] hover:bg-[#3C3F41]',
+          'group flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-sm',
+          isSelected
+            ? node.isDirectory
+              ? 'bg-[#3574F0]/20 text-[#DFE1E5]'
+              : 'bg-[#4E5254] text-[#DFE1E5]'
+            : node.isDirectory
+              ? 'text-[#6BABE0] hover:bg-[#3C3F41]'
+              : 'text-[#A9B7C6] hover:bg-[#3C3F41]',
         ].join(' ')}
         style={{ paddingLeft }}
+        data-file-tree-node
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         onContextMenu={(e) => {
           e.preventDefault()
           e.stopPropagation()
+          window.dispatchEvent(new CustomEvent('filetree:closeContextMenu'))
           setSelected(node.path)
           setContextMenu({ x: e.clientX, y: e.clientY })
         }}
       >
         {node.isDirectory && (
-          <span className="text-[10px] text-[#8C8C8C]">
+          <span className={['text-[10px]', isSelected ? 'text-[#DFE1E5]' : 'text-[#6BABE0]/70'].join(' ')}>
             {isExpanded ? '▼' : '▶'}
           </span>
         )}
         {node.isDirectory ? (
-          <FolderIcon expanded={isExpanded} size={16} className="shrink-0" />
+          <FolderIcon expanded={isExpanded} size={16} className={['shrink-0', isSelected ? 'text-[#DFE1E5]' : 'text-[#6BABE0]'].join(' ')} />
         ) : (
-          <FileIcon name={node.name} size={16} className="shrink-0" />
+          <FileIcon name={node.name} size={16} className={['shrink-0', isSelected ? 'text-[#DFE1E5]' : 'text-[#6BABE0]'].join(' ')} />
         )}
         <span
           className={['truncate', gitStatus === 'deleted' ? 'line-through' : ''].join(' ')}
-          style={gitColor ? { color: gitColor } : undefined}
+          style={gitColor && !isSelected ? { color: gitColor } : undefined}
         >
           {node.name}
         </span>
