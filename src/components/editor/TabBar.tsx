@@ -43,6 +43,9 @@ export function TabBar(): JSX.Element {
             {tab.isModified && (
               <span className="text-[#3574F0]">●</span>
             )}
+            {tab.hasExternalChange && (
+              <span className="text-[#EDA200]" title="File changed externally">●</span>
+            )}
             <button
               type="button"
               className={[

@@ -5,6 +5,7 @@ import crypto from 'node:crypto'
 import { createRequire } from 'node:module'
 import type { IPty } from 'node-pty'
 import { registerGitHandlers } from './gitService'
+import { registerWatcherHandlers } from './watcherService'
 
 const require = createRequire(import.meta.url)
 const { spawn } = require('node-pty') as typeof import('node-pty')
@@ -517,6 +518,7 @@ ipcMain.handle('terminal:kill', (_event, id: string) => {
 
 void app.whenReady().then(() => {
   registerGitHandlers()
+  registerWatcherHandlers()
   createWindow()
 
   app.on('activate', () => {

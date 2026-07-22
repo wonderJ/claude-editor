@@ -10,9 +10,19 @@ import { WelcomePage } from './WelcomePage'
 import { getBaseName, isImageFile } from '../../lib/fileTreeActions'
 
 export function EditorPanel(): JSX.Element {
-  const { tabs, activeTabPath, isLoading, openTab } = useEditorStore()
+  const { tabs, activeTabPath, isLoading, openTab, markExternalChange } = useEditorStore()
   const { selectedPath } = useFileStore()
   const [isDragOver, setIsDragOver] = useState(false)
+
+  // When switching to a tab that was marked as changed externally, ask the
+  // store to resolve it (auto-reload if clean, prompt via event if modified).
+  useEffect(() => {
+    if (!activeTabPath) return
+    const activeTab = useEditorStore.getState().tabs.find((t) => t.path === activeTabPath)
+    if (activeTab?.hasExternalChange) {
+      markExternalChange(activeTabPath)
+    }
+  }, [activeTabPath, markExternalChange])
 
   useEffect(() => {
     if (!selectedPath) return

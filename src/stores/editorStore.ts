@@ -16,6 +16,7 @@ export interface EditorTab {
   language: string
   isModified: boolean
   isReadOnly: boolean
+  hasExternalChange?: boolean
   diff?: EditorTabDiff
 }
 
@@ -32,6 +33,9 @@ interface EditorStore {
   switchTab: (path: string) => void
   updateContent: (path: string, content: string) => void
   markSaved: (path: string) => void
+  markExternalChange: (path: string) => void
+  reloadTab: (path: string, content: string) => void
+  clearExternalChange: (path: string) => void
   setLoading: (loading: boolean) => void
   getActiveTab: () => EditorTab | undefined
   showWelcome: () => void
@@ -161,6 +165,55 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     const { tabs } = get()
     const nextTabs = tabs.map((t) =>
       t.path === path ? { ...t, originalContent: t.content, isModified: false } : t
+    )
+    set({ tabs: nextTabs })
+  },
+
+  markExternalChange: (path) => {
+    const { tabs, activeTabPath } = get()
+    const tab = tabs.find((t) => t.path === path)
+    if (!tab || tab.isReadOnly) return
+
+    if (path === activeTabPath) {
+      // Active tab: reload immediately if not modified, otherwise notify.
+      if (!tab.isModified) {
+        void window.electronAPI?.readFile(path).then((result) => {
+          if ('content' in result) {
+            // Avoid reloading when disk content matches the editor content
+            // (e.g. after the editor itself just saved the file).
+            if (result.content === tab.content) {
+              get().clearExternalChange(path)
+            } else {
+              get().reloadTab(path, result.content)
+            }
+          }
+        })
+      } else {
+        window.dispatchEvent(new CustomEvent('editor:externalChange', { detail: path }))
+      }
+    } else {
+      // Inactive tab: mark so it reloads when the user switches to it.
+      const nextTabs = tabs.map((t) =>
+        t.path === path ? { ...t, hasExternalChange: true } : t
+      )
+      set({ tabs: nextTabs })
+    }
+  },
+
+  reloadTab: (path, content) => {
+    const { tabs } = get()
+    const nextTabs = tabs.map((t) =>
+      t.path === path
+        ? { ...t, content, originalContent: content, isModified: false, hasExternalChange: false }
+        : t
+    )
+    set({ tabs: nextTabs })
+  },
+
+  clearExternalChange: (path) => {
+    const { tabs } = get()
+    const nextTabs = tabs.map((t) =>
+      t.path === path ? { ...t, hasExternalChange: false } : t
     )
     set({ tabs: nextTabs })
   },

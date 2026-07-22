@@ -45,6 +45,15 @@ interface FileStore {
 }
 
 let refreshTimeout: ReturnType<typeof setTimeout> | null = null
+let fsChangedCleanup: (() => void) | null = null
+
+function subscribeFsChanged(): void {
+  if (fsChangedCleanup) return
+  if (!window.electronAPI) return
+  fsChangedCleanup = window.electronAPI.onFsChanged(() => {
+    useFileStore.getState().refresh()
+  })
+}
 
 export const useFileStore = create<FileStore>((set, get) => ({
   rootPath: null,
@@ -60,9 +69,17 @@ export const useFileStore = create<FileStore>((set, get) => ({
       clearTimeout(refreshTimeout)
       refreshTimeout = null
     }
+    const prevPath = get().rootPath
+    if (prevPath && window.electronAPI) {
+      void window.electronAPI.watchStop()
+    }
     set({ rootPath: path, files: [], selectedPath: null, expandedPaths: new Set() })
     if (path) {
-      if (window.electronAPI) void window.electronAPI.historySetRoot(path)
+      subscribeFsChanged()
+      if (window.electronAPI) {
+        void window.electronAPI.historySetRoot(path)
+        void window.electronAPI.watchStart(path)
+      }
       get().refresh()
     }
     // Wire git repo (dynamic import avoids circular dependency with gitStore).

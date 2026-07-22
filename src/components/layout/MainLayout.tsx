@@ -207,6 +207,38 @@ export function MainLayout(): JSX.Element {
     if (window.electronAPI) setVersion(window.electronAPI.version)
   }, [])
 
+  // Watch for per-file external changes and route them to the editor store.
+  useEffect(() => {
+    if (!window.electronAPI) return
+    const cleanup = window.electronAPI.onFsFileChanged((path) => {
+      useEditorStore.getState().markExternalChange(path)
+    })
+    return cleanup
+  }, [])
+
+  // Prompt before reloading a modified tab that changed externally.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const path = (e as CustomEvent<string>).detail
+      setConfirm({
+        open: true,
+        title: 'File Changed Externally',
+        message: `The file "${path}" was modified outside the editor. Reload and discard unsaved changes?`,
+        danger: true,
+        onConfirm: async () => {
+          const result = await window.electronAPI?.readFile(path)
+          if (result && 'content' in result) {
+            useEditorStore.getState().reloadTab(path, result.content)
+          } else {
+            addToast({ message: 'Failed to reload file', type: 'error' })
+          }
+        },
+      })
+    }
+    window.addEventListener('editor:externalChange', handler)
+    return () => { window.removeEventListener('editor:externalChange', handler) }
+  }, [addToast])
+
   useEffect(() => {
     const onFull = () => {
       void document.documentElement.requestFullscreen().catch(() => {})

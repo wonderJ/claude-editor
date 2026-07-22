@@ -58,7 +58,11 @@ export interface ElectronAPI {
   getPathForFile: (file: File) => string
   // Read file paths from clipboard when files are copied in Explorer
   readClipboardFilePaths: () => Promise<string[]>
-  // Window controls
+  // Watcher
+  watchStart: (rootPath: string) => Promise<{ success: boolean }>
+  watchStop: () => Promise<{ success: boolean }>
+  onFsChanged: (callback: () => void) => () => void
+  onFsFileChanged: (callback: (path: string) => void) => () => void
   windowMinimize: () => void
   windowMaximize: () => void
   windowClose: () => void
@@ -188,7 +192,22 @@ const api: ElectronAPI = {
   },
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   readClipboardFilePaths: () => ipcRenderer.invoke('clipboard:readFilePaths'),
-  // Window controls
+  watchStart: (rootPath: string) => ipcRenderer.invoke('watch:start', rootPath),
+  watchStop: () => ipcRenderer.invoke('watch:stop'),
+  onFsChanged: (callback) => {
+    const handler = () => { callback() }
+    const on = ipcRenderer.on.bind(ipcRenderer)
+    const off = ipcRenderer.removeListener.bind(ipcRenderer)
+    on('fs:changed', handler)
+    return () => { off('fs:changed', handler) }
+  },
+  onFsFileChanged: (callback) => {
+    const handler = (_event: unknown, path: string) => { callback(path) }
+    const on = ipcRenderer.on.bind(ipcRenderer)
+    const off = ipcRenderer.removeListener.bind(ipcRenderer)
+    on('fs:fileChanged', handler)
+    return () => { off('fs:fileChanged', handler) }
+  },
   windowMinimize: () => ipcRenderer.send('window:minimize'),
   windowMaximize: () => ipcRenderer.send('window:maximize'),
   windowClose: () => ipcRenderer.send('window:close'),
