@@ -5,7 +5,7 @@ import crypto from 'node:crypto'
 import { createRequire } from 'node:module'
 import type { IPty } from 'node-pty'
 import { registerGitHandlers } from './gitService'
-import { registerWatcherHandlers } from './watcherService'
+import { registerWatcherHandlers, stopWatching } from './watcherService'
 
 const require = createRequire(import.meta.url)
 const { spawn } = require('node-pty') as typeof import('node-pty')
@@ -82,6 +82,13 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  // Ensure all child processes (terminals, watchers) are cleaned up when the
+  // user closes the window, so no "Claude Editor.exe" process lingers.
+  mainWindow.on('close', () => {
+    killAllTerminals()
+    stopFileWatcher()
   })
 
   // Window state events for renderer
@@ -515,6 +522,25 @@ ipcMain.handle('terminal:kill', (_event, id: string) => {
     return { error: (err as Error).message }
   }
 })
+
+function killAllTerminals(): void {
+  for (const [id, pty] of terminals) {
+    try {
+      pty.kill()
+    } catch (err) {
+      logToFile('killAllTerminals error', id, err)
+    }
+  }
+  terminals.clear()
+}
+
+function stopFileWatcher(): void {
+  try {
+    stopWatching()
+  } catch (err) {
+    logToFile('stopFileWatcher error', err)
+  }
+}
 
 void app.whenReady().then(() => {
   registerGitHandlers()

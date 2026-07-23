@@ -61,7 +61,7 @@ function startWatching(rootPath: string): void {
   })
 }
 
-function stopWatching(): void {
+export function stopWatching(): void {
   if (debounceTimer) {
     clearTimeout(debounceTimer)
     debounceTimer = null

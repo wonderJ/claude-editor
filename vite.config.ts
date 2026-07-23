@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
+import { resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 export default defineConfig({
   plugins: [
@@ -45,6 +47,14 @@ export default defineConfig({
       },
     ]),
     renderer(),
+    viteStaticCopy({
+      targets: [
+        {
+          src: resolve('node_modules/monaco-editor/min/vs').replace(/\\/g, '/'),
+          dest: 'monaco-editor',
+        },
+      ],
+    }),
   ],
   build: {
     outDir: 'dist',

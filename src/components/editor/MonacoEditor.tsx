@@ -1,11 +1,19 @@
 import { useRef, useCallback, useEffect } from 'react'
-import Editor from '@monaco-editor/react'
+import Editor, { loader } from '@monaco-editor/react'
 import type { JSX } from 'react'
 import { useEditorStore, scheduleAutoSave } from '../../stores/editorStore'
 import { useFileStore } from '../../stores/fileStore'
 import { useGitStore } from '../../stores/gitStore'
 import { useHistoryStore } from '../../stores/historyStore'
 import { getBaseName } from '../../lib/fileTreeActions'
+
+// Load Monaco from local assets instead of CDN so the packaged Electron app
+// works offline and shows the editor immediately.
+loader.config({
+  paths: {
+    vs: `${import.meta.env.BASE_URL}monaco-editor/vs`,
+  },
+})
 
 interface MonacoEditorProps {
   path: string

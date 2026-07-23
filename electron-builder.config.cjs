@@ -3,7 +3,7 @@ module.exports = {
   appId: 'com.claude.editor',
   productName: 'Claude Editor',
   directories: {
-    output: 'D:/release',
+    output: 'release',
   },
   files: [
     'dist/**/*',
