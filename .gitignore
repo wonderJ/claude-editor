@@ -69,3 +69,6 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
+
+# Generated Monaco assets
+public/monaco-editor

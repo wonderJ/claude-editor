@@ -23,6 +23,7 @@ export interface EditorTab {
 interface EditorStore {
   tabs: EditorTab[]
   activeTabPath: string | null
+  splitTabPaths: string[]
   isLoading: boolean
 
   openTab: (path: string, name: string, content: string) => void
@@ -36,6 +37,10 @@ interface EditorStore {
   markExternalChange: (path: string) => void
   reloadTab: (path: string, content: string) => void
   clearExternalChange: (path: string) => void
+  addSplitTab: (path: string) => void
+  removeSplitTab: (path: string) => void
+  switchSplitTab: (path: string) => void
+  closeAllSplitTabs: () => void
   setLoading: (loading: boolean) => void
   getActiveTab: () => EditorTab | undefined
   showWelcome: () => void
@@ -70,6 +75,7 @@ const MAX_TABS = 30
 export const useEditorStore = create<EditorStore>((set, get) => ({
   tabs: [],
   activeTabPath: null,
+  splitTabPaths: [],
   isLoading: false,
 
   openTab: (path, name, content) => {
@@ -127,24 +133,25 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   },
 
   closeTab: (path) => {
-    const { tabs, activeTabPath } = get()
+    const { tabs, activeTabPath, splitTabPaths } = get()
     const nextTabs = tabs.filter((t) => t.path !== path)
     let nextActive = activeTabPath
+    const nextSplit = splitTabPaths.filter((p) => p !== path)
     if (activeTabPath === path) {
       const idx = tabs.findIndex((t) => t.path === path)
       nextActive = nextTabs[idx]?.path ?? nextTabs[idx - 1]?.path ?? null
     }
-    set({ tabs: nextTabs, activeTabPath: nextActive })
+    set({ tabs: nextTabs, activeTabPath: nextActive, splitTabPaths: nextSplit })
   },
 
   closeAllTabs: () => {
-    set({ tabs: [], activeTabPath: null })
+    set({ tabs: [], activeTabPath: null, splitTabPaths: [] })
   },
 
   closeOtherTabs: (path) => {
     const { tabs } = get()
     const keep = tabs.find((t) => t.path === path)
-    set({ tabs: keep ? [keep] : [], activeTabPath: path })
+    set({ tabs: keep ? [keep] : [], activeTabPath: path, splitTabPaths: keep ? [keep.path] : [] })
   },
 
   switchTab: (path) => {
@@ -216,6 +223,33 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       t.path === path ? { ...t, hasExternalChange: false } : t
     )
     set({ tabs: nextTabs })
+  },
+
+  addSplitTab: (path) => {
+    const { splitTabPaths } = get()
+    if (splitTabPaths.includes(path)) {
+      set({ splitTabPaths })
+      return
+    }
+    set({ splitTabPaths: [...splitTabPaths, path] })
+  },
+
+  removeSplitTab: (path) => {
+    const { splitTabPaths } = get()
+    const next = splitTabPaths.filter((p) => p !== path)
+    set({ splitTabPaths: next })
+  },
+
+  switchSplitTab: (path) => {
+    const { splitTabPaths } = get()
+    if (!splitTabPaths.includes(path)) return
+    // Move activated tab to the end so it stays visible as the current one.
+    const next = [...splitTabPaths.filter((p) => p !== path), path]
+    set({ splitTabPaths: next })
+  },
+
+  closeAllSplitTabs: () => {
+    set({ splitTabPaths: [] })
   },
 
   setLoading: (loading) => {

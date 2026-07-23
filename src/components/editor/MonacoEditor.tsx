@@ -15,6 +15,11 @@ loader.config({
   },
 })
 
+// Eagerly initialize the Monaco loader as soon as this module is imported.
+// This moves the heavy script/ worker download out of the first file-open
+// path and makes the editor appear almost instantly when a tab is created.
+void loader.init()
+
 interface MonacoEditorProps {
   path: string
   content: string

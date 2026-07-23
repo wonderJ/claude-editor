@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLayoutStore } from '../../stores/layoutStore'
 import { useFileStore } from '../../stores/fileStore'
 import { useTerminalStore } from '../../stores/terminalStore'
@@ -15,14 +15,16 @@ import { MenuBar, type MenuItemDef } from '../menu/MenuBar'
 import { CommandPalette, type CommandPaletteItem } from '../menu/CommandPalette'
 import { FileQuickOpen } from '../menu/FileQuickOpen'
 import { SearchPanel } from '../search/SearchPanel'
-import { SettingsDialog } from '../settings/SettingsDialog'
-import { KeyboardShortcutsReference } from '../help/KeyboardShortcutsReference'
-import { AboutDialog } from '../help/AboutDialog'
-import { ReleaseNotesDialog } from '../help/ReleaseNotesDialog'
 import { PromptDialog } from '../common/PromptDialog'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { ManageRemotesDialog } from '../git/ManageRemotesDialog'
 import { useGitMenuActions } from '../git/useGitMenuActions'
+
+const SettingsDialog = lazy(() => import('../settings/SettingsDialog').then((m) => ({ default: m.SettingsDialog })))
+const KeyboardShortcutsReference = lazy(() => import('../help/KeyboardShortcutsReference').then((m) => ({ default: m.KeyboardShortcutsReference })))
+const AboutDialog = lazy(() => import('../help/AboutDialog').then((m) => ({ default: m.AboutDialog })))
+const ReleaseNotesDialog = lazy(() => import('../help/ReleaseNotesDialog').then((m) => ({ default: m.ReleaseNotesDialog })))
+
 import { findNode, getParentPath, getBaseName, generateUniquePath } from '../../lib/fileTreeActions'
 
 // ── WindowControls ────────────────────────────────────────
@@ -800,26 +802,36 @@ export function MainLayout(): JSX.Element {
           onClose={() => { setSearchMode(null) }}
         />
       )}
-      <SettingsDialog
-        isOpen={settingsOpen}
-        onClose={() => { setSettingsOpen(false) }}
-        theme={theme}
-        onThemeChange={setTheme}
-      />
-      <KeyboardShortcutsReference
-        isOpen={shortcutsOpen}
-        onClose={() => { setShortcutsOpen(false) }}
-      />
-      <AboutDialog
-        isOpen={aboutOpen}
-        onClose={() => { setAboutOpen(false) }}
-        version={version}
-      />
-      <ReleaseNotesDialog
-        isOpen={releaseNotesOpen}
-        onClose={() => { setReleaseNotesOpen(false) }}
-        version={version}
-      />
+      <Suspense fallback={null}>
+        {settingsOpen && (
+          <SettingsDialog
+            isOpen={settingsOpen}
+            onClose={() => { setSettingsOpen(false) }}
+            theme={theme}
+            onThemeChange={setTheme}
+          />
+        )}
+        {shortcutsOpen && (
+          <KeyboardShortcutsReference
+            isOpen={shortcutsOpen}
+            onClose={() => { setShortcutsOpen(false) }}
+          />
+        )}
+        {aboutOpen && (
+          <AboutDialog
+            isOpen={aboutOpen}
+            onClose={() => { setAboutOpen(false) }}
+            version={version}
+          />
+        )}
+        {releaseNotesOpen && (
+          <ReleaseNotesDialog
+            isOpen={releaseNotesOpen}
+            onClose={() => { setReleaseNotesOpen(false) }}
+            version={version}
+          />
+        )}
+      </Suspense>
       <ManageRemotesDialog
         isOpen={gitMenuActions.isRemotesOpen}
         onClose={() => { gitMenuActions.setIsRemotesOpen(false) }}

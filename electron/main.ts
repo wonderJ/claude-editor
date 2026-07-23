@@ -59,6 +59,7 @@ function createWindow(): void {
     frame: false,
     show: true,
     center: true,
+    backgroundColor: '#1E1F22',
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -543,8 +544,21 @@ function stopFileWatcher(): void {
 }
 
 void app.whenReady().then(() => {
-  registerGitHandlers()
-  registerWatcherHandlers()
+  // Defer heavy IPC handler registration until after the renderer is visible.
+  // This gets the window on screen faster; the handlers are not needed until
+  // the user opens a folder or interacts with Git / terminal.
+  const defer = (cb: () => void) => {
+    const ric = (globalThis as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
+    if (typeof ric === 'function') {
+      ric(cb)
+    } else {
+      setTimeout(cb, 50)
+    }
+  }
+  defer(() => {
+    registerGitHandlers()
+    registerWatcherHandlers()
+  })
   createWindow()
 
   app.on('activate', () => {
